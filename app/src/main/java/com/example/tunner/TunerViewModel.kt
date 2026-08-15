@@ -1,6 +1,7 @@
 package com.example.tunner
 
 import android.app.Application
+import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.tunner.audio.AudioInput
@@ -41,7 +42,15 @@ class TunerViewModel(application: Application) : AndroidViewModel(application) {
     // Rolling window of recent valid frequencies for median smoothing.
     private val freqWindow = ArrayDeque<Double>()
 
+    // Frame buffers (window is the filtered sliding frame; hop is the raw chunk
+    // read each cycle and filtered before being appended).
     private val window = ShortArray(FRAME_SIZE)
+    private val hop = ShortArray(HOP)
+
+    // Hysteresis: consecutive frames without an accepted pitch before the
+    // displayed note is dropped (≈1.0s at 21.5 fps).
+    private var missedFrames = 0
+    private var frameCount = 0L
 
     /** Called by the UI after the RECORD_AUDIO permission result is known. */
     fun onPermissionResult(granted: Boolean) {
@@ -79,13 +88,17 @@ class TunerViewModel(application: Application) : AndroidViewModel(application) {
         collectJob = viewModelScope.launch(Dispatchers.Default) {
             try {
                 audioInput.start()
-                // Prime the sliding window with a full frame.
+                // Prime: read a full frame and filter it once.
                 if (!audioInput.read(window, 0, FRAME_SIZE)) return@launch
+                filter.process(window, settings.value.filterStrength)
                 while (isActive) {
                     processWindow()
-                    // Slide by HOP and top up with new samples (50% overlap).
+                    // Read HOP new raw samples, filter only them (stateful, so
+                    // each sample is filtered exactly once), then slide.
+                    if (!audioInput.read(hop, 0, HOP)) break
+                    filter.process(hop, settings.value.filterStrength)
                     System.arraycopy(window, HOP, window, 0, FRAME_SIZE - HOP)
-                    if (!audioInput.read(window, FRAME_SIZE - HOP, HOP)) break
+                    System.arraycopy(hop, 0, window, FRAME_SIZE - HOP, HOP)
                 }
             } finally {
                 audioInput.stop()
@@ -104,31 +117,41 @@ class TunerViewModel(application: Application) : AndroidViewModel(application) {
 
     private fun processWindow() {
         val s = settings.value
-
-        // Pre-filter the frame to reduce high-frequency noise / harmonics.
-        filter.process(window, s.filterStrength)
-
         val pitch = detector.detect(window, SAMPLE_RATE)
         val spectrum = detector.lastSpectrum?.toList() ?: emptyList()
-        if (pitch == null || pitch.confidence < s.sensitivity.confidence) {
-            freqWindow.clear()
-            _state.update { it.copy(
-                detectedFrequency = null,
-                noteName = null,
-                octave = null,
-                midi = null,
-                cents = null,
-                confidence = 0.0,
-                spectrum = spectrum,
-                activeString = if (it.mode == TunerMode.GUITAR) it.selectedString else null,
-            ) }
+        val accepted = pitch != null && pitch.confidence >= s.sensitivity.confidence
+
+        if (!accepted) {
+            missedFrames++
+            if (missedFrames >= HOLD_FRAMES) {
+                freqWindow.clear()
+                missedFrames = 0
+                _state.update { it.copy(
+                    detectedFrequency = null,
+                    noteName = null,
+                    octave = null,
+                    midi = null,
+                    cents = null,
+                    confidence = 0.0,
+                    spectrum = spectrum,
+                    activeString = if (it.mode == TunerMode.GUITAR) it.selectedString else null,
+                ) }
+            } else {
+                // Hold the last note through a brief dip; refresh spectrum only.
+                _state.update { it.copy(spectrum = spectrum) }
+            }
+            logFrame(pitch?.frequency, pitch?.confidence ?: 0.0, accepted = false)
             return
         }
 
+        missedFrames = 0
         freqWindow.addLast(pitch.frequency)
         val windowSize = s.sensitivity.windowSize
         if (freqWindow.size > windowSize) freqWindow.removeFirst()
-        if (freqWindow.size < windowSize) return
+        if (freqWindow.size < windowSize) {
+            _state.update { it.copy(spectrum = spectrum) }
+            return
+        }
 
         val sorted = freqWindow.sorted()
         val medianFreq = sorted[sorted.size / 2]
@@ -136,6 +159,8 @@ class TunerViewModel(application: Application) : AndroidViewModel(application) {
         val a4 = _state.value.referenceA4
         val note = NoteMapper.noteFromFrequency(medianFreq, a4)
         val cents = NoteMapper.cents(medianFreq, a4)
+
+        logFrame(pitch.frequency, pitch.confidence, accepted = true)
 
         _state.update { st ->
             val activeString = when {
@@ -156,8 +181,15 @@ class TunerViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    private fun logFrame(freq: Double?, confidence: Double, accepted: Boolean) {
+        frameCount++
+        if (frameCount % LOG_EVERY != 0L) return
+        Log.d(TAG, "f=${freq ?: "null"} conf=${"%.2f".format(confidence)} accepted=$accepted missed=$missedFrames")
+    }
+
     private fun resetDetection() {
         freqWindow.clear()
+        missedFrames = 0
         _state.update {
             it.copy(
                 detectedFrequency = null,
@@ -178,8 +210,11 @@ class TunerViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private companion object {
+        const val TAG = "Tuner"
         const val SAMPLE_RATE = 44100
         const val FRAME_SIZE = 4096   // ~93 ms window
         const val HOP = 2048          // ~46 ms update interval (50% overlap)
+        const val HOLD_FRAMES = 22    // ≈1.0s hold before dropping the note
+        const val LOG_EVERY = 10L     // throttle debug logging
     }
 }

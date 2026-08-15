@@ -55,6 +55,24 @@ class HybridPitchDetectorTest {
     }
 
     @Test
+    fun detectsNoisyTone() {
+        val freq = 196.0
+        val signal = sineBuffer(freq, amplitude = 0.5)
+        val rnd = Random(7)
+        // Add uniform noise at ~0.16 amplitude → SNR ≈ 10 dB.
+        for (i in signal.indices) {
+            val noise = rnd.nextInt(10486) - 5243
+            signal[i] = (signal[i] + noise)
+                .coerceIn(Short.MIN_VALUE.toInt(), Short.MAX_VALUE.toInt())
+                .toShort()
+        }
+        val pitch = detector.detect(signal, sampleRate)
+        assertNotNull("no pitch detected for noisy $freq Hz tone", pitch)
+        val cents = 1200.0 * (ln(pitch!!.frequency / freq) / ln(2.0))
+        assertTrue("noisy tone error too large: ${"%.1f".format(cents)} cents", abs(cents) <= 20.0)
+    }
+
+    @Test
     fun rejectsSilence() {
         assertNull(detector.detect(ShortArray(frameSize), sampleRate))
     }

@@ -36,10 +36,16 @@ class HybridPitchDetector(
 
         val (coarse, spectrum) = coarseFundamental(buffer, sampleRate, n)
         lastSpectrum = spectrum
-        if (coarse == null) return null
 
-        return yin.detectGuided(buffer, sampleRate, coarse)
-            ?: yin.detect(buffer, sampleRate)
+        // Refine with YIN, guided by the coarse estimate. If the guided search
+        // is missing or only marginal, fall back to the full-range YIN (which
+        // has its own silence/noise gates) rather than giving up or returning a
+        // weak result.
+        val guided = coarse?.let { yin.detectGuided(buffer, sampleRate, it) }
+        if (guided != null && guided.confidence >= GUIDED_CONFIDENCE_FLOOR) {
+            return guided
+        }
+        return yin.detect(buffer, sampleRate)
     }
 
     private fun coarseFundamental(
@@ -97,5 +103,6 @@ class HybridPitchDetector(
         const val MAX_COARSE_HZ = 2500.0
         const val SUBHARMONIC_RATIO = 0.4
         const val PEAK_FLOOR = 1.0 // reject silence (a full-scale tone peaks ~500)
+        const val GUIDED_CONFIDENCE_FLOOR = 0.5 // below this, use full-range YIN
     }
 }

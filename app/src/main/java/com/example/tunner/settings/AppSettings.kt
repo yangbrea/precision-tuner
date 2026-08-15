@@ -25,7 +25,7 @@ enum class AccentColor(val label: String, val color: Color) {
  * confidence gate.
  */
 enum class Sensitivity(val label: String, val windowSize: Int, val confidence: Double) {
-    HIGH("高", 3, 0.55),
-    MEDIUM("中", 5, 0.60),
-    LOW("低", 9, 0.70),
+    HIGH("高", 3, 0.45),
+    MEDIUM("中", 5, 0.50),
+    LOW("低", 9, 0.60),
 }

@@ -146,7 +146,7 @@ class YinPitchDetector(
 
     private companion object {
         const val SILENCE_RMS = 1e-4          // ~ -80 dBFS gate
-        const val MAX_FALLBACK_CMNDF = 0.5    // reject non-periodic buffers
+        const val MAX_FALLBACK_CMNDF = 0.6    // accept confidence >= 0.4 (reject noise)
         const val MIN_FREQUENCY = 20.0        // Hz
     }
 }

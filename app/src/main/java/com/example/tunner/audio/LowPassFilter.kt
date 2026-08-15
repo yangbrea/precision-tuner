@@ -23,10 +23,7 @@ class LowPassFilter(private val sampleRate: Double = 44100.0) {
 
     fun process(buffer: ShortArray, strength: Float) {
         applyStrength(strength)
-        // Each frame is filtered independently (state resets per frame); the
-        // transient is only a few samples and is negligible for pitch detection.
-        previous = 0.0
-        if (strength <= 0f) return // bypass
+        if (strength <= 0f) return // bypass (state is untouched)
 
         for (i in buffer.indices) {
             val x = buffer[i].toDouble()
@@ -50,6 +47,9 @@ class LowPassFilter(private val sampleRate: Double = 44100.0) {
         } else {
             1.0 - exp(-2.0 * PI * cutoff / sampleRate)
         }
+        // Reset state only when the coefficient changes, so that a running
+        // stream stays phase-continuous across frames.
+        previous = 0.0
     }
 
     private companion object {
