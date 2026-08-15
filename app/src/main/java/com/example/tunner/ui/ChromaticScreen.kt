@@ -49,6 +49,15 @@ fun ChromaticScreen(
                 .height(210.dp),
         )
 
+        Spacer(Modifier.height(4.dp))
+        SpectrumView(
+            spectrum = state.spectrum,
+            detectedFrequency = state.detectedFrequency,
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(80.dp),
+        )
+
         Spacer(Modifier.weight(1f))
 
         // A4 reference pitch.

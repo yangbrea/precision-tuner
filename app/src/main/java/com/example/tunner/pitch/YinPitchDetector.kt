@@ -1,6 +1,7 @@
 package com.example.tunner.pitch
 
 import kotlin.math.abs
+import kotlin.math.roundToInt
 import kotlin.math.sqrt
 
 /**
@@ -9,22 +10,35 @@ import kotlin.math.sqrt
  * Robust, well-documented monophonic fundamental-frequency estimator. Steps:
  *  1. Difference function d(τ) = Σ (x[j] − x[j+τ])².
  *  2. Cumulative-mean-normalized difference function d'(τ).
- *  3. Absolute threshold: first τ with d'(τ) < threshold (avoids the lag-0 dip).
+ *  3. Absolute threshold: first local minimum of d' below the threshold.
  *  4. Parabolic interpolation around that τ for sub-sample precision.
  *
- * A "confidence" value (1 − d'(τ)) is returned so callers can gate the display.
+ * [detectGuided] restricts the lag search to a band around a coarse frequency
+ * estimate (e.g. from an FFT), which both speeds the search and disambiguates
+ * octaves; it is used by [HybridPitchDetector].
  *
- * @param threshold  YIN absolute threshold, typically 0.1–0.2 (lower = stricter).
- * @param maxTau     maximum lag to search, in samples. Determines the lowest
- *                   detectable frequency: Fs / maxTau. Default 2048 @ 44.1 kHz
- *                   covers down to ~21.5 Hz.
+ * @param threshold  YIN absolute threshold, typically 0.1–0.2.
+ * @param maxTau     maximum lag to search, in samples.
  */
 class YinPitchDetector(
     private val threshold: Double = 0.1,
     private val maxTau: Int = 2048,
 ) : PitchDetector {
 
-    override fun detect(buffer: ShortArray, sampleRate: Int): Pitch? {
+    override fun detect(buffer: ShortArray, sampleRate: Int): Pitch? =
+        detectInternal(buffer, sampleRate, searchRange = null)
+
+    /** Refine a coarse frequency estimate by searching lags within ±15% of it. */
+    fun detectGuided(buffer: ShortArray, sampleRate: Int, coarseFrequency: Double): Pitch? {
+        val tauCenter = (sampleRate / coarseFrequency).roundToInt()
+        val margin = maxOf(24, (tauCenter * 0.15).toInt())
+        val lo = maxOf(1, tauCenter - margin)
+        val hi = minOf(maxTau - 1, tauCenter + margin)
+        if (lo > hi) return null
+        return detectInternal(buffer, sampleRate, searchRange = lo..hi)
+    }
+
+    private fun detectInternal(buffer: ShortArray, sampleRate: Int, searchRange: IntRange?): Pitch? {
         val n = buffer.size
         if (n < 4) return null
 
@@ -39,12 +53,15 @@ class YinPitchDetector(
         val rms = sqrt(sumSq / n)
         if (rms < SILENCE_RMS) return null
 
-        val tauMax = minOf(maxTau, n / 2)
-        if (tauMax < 2) return null
+        val fullTauMax = minOf(maxTau, n / 2)
+        if (fullTauMax < 2) return null
 
-        // 1. Difference function.
-        val d = DoubleArray(tauMax)
-        for (tau in 1 until tauMax) {
+        // Compute the difference function only as far as needed.
+        val computeUpTo = searchRange?.last?.coerceAtMost(fullTauMax) ?: fullTauMax
+        if (computeUpTo < 1) return null
+
+        val d = DoubleArray(computeUpTo + 1)
+        for (tau in 1..computeUpTo) {
             var sum = 0.0
             val limit = n - tau
             var j = 0
@@ -56,44 +73,21 @@ class YinPitchDetector(
             d[tau] = sum
         }
 
-        // 2. Cumulative mean normalized difference.
-        val cmndf = DoubleArray(tauMax)
+        val cmndf = DoubleArray(computeUpTo + 1)
         cmndf[0] = 1.0
         var running = 0.0
-        for (tau in 1 until tauMax) {
+        for (tau in 1..computeUpTo) {
             running += d[tau]
             cmndf[tau] = if (running > 0.0) d[tau] * tau / running else 1.0
         }
 
-        // 3. Absolute threshold: first LOCAL minimum of cmndf below the threshold.
-        //    (A bare crossing would land on the descending slope just before the
-        //    period and bias the estimate sharp, so require a local minimum.)
-        var tauEstimate = -1
-        for (tau in 1 until tauMax - 1) {
-            if (cmndf[tau] < threshold &&
-                cmndf[tau] <= cmndf[tau - 1] &&
-                cmndf[tau] <= cmndf[tau + 1]
-            ) {
-                tauEstimate = tau
-                break
-            }
+        val tauEstimate = if (searchRange != null) {
+            guidedSearch(cmndf, searchRange)
+        } else {
+            fullSearch(cmndf, computeUpTo)
         }
+        if (tauEstimate == -1) return null
 
-        // Fallback: global minimum of cmndf, accepted only if periodic enough.
-        if (tauEstimate == -1) {
-            var bestValue = Double.MAX_VALUE
-            var bestTau = -1
-            for (tau in 1 until tauMax - 1) {
-                if (cmndf[tau] < bestValue) {
-                    bestValue = cmndf[tau]
-                    bestTau = tau
-                }
-            }
-            if (bestTau == -1 || bestValue > MAX_FALLBACK_CMNDF) return null
-            tauEstimate = bestTau
-        }
-
-        // 4. Parabolic interpolation for sub-sample accuracy.
         val refinedTau = parabolicInterpolation(cmndf, tauEstimate)
         if (refinedTau <= 0.0) return null
 
@@ -102,6 +96,42 @@ class YinPitchDetector(
 
         val confidence = (1.0 - cmndf[tauEstimate]).coerceIn(0.0, 1.0)
         return Pitch(frequency, confidence)
+    }
+
+    /** Full-range YIN: first local minimum below threshold, else global minimum. */
+    private fun fullSearch(cmndf: DoubleArray, computeUpTo: Int): Int {
+        for (tau in 1 until computeUpTo) {
+            if (cmndf[tau] < threshold &&
+                cmndf[tau] <= cmndf[tau - 1] &&
+                cmndf[tau] <= cmndf[tau + 1]
+            ) {
+                return tau
+            }
+        }
+        var bestValue = Double.MAX_VALUE
+        var bestTau = -1
+        for (tau in 1 until computeUpTo) {
+            if (cmndf[tau] < bestValue) {
+                bestValue = cmndf[tau]
+                bestTau = tau
+            }
+        }
+        if (bestTau == -1 || bestValue > MAX_FALLBACK_CMNDF) return -1
+        return bestTau
+    }
+
+    /** Guided search: deepest minimum within the restricted range. */
+    private fun guidedSearch(cmndf: DoubleArray, range: IntRange): Int {
+        var bestValue = Double.MAX_VALUE
+        var bestTau = -1
+        for (t in range) {
+            if (cmndf[t] < bestValue) {
+                bestValue = cmndf[t]
+                bestTau = t
+            }
+        }
+        if (bestTau == -1 || bestValue > MAX_FALLBACK_CMNDF) return -1
+        return bestTau
     }
 
     private fun parabolicInterpolation(cmndf: DoubleArray, tau: Int): Double {

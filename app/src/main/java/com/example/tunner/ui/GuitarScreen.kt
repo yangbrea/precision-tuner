@@ -61,6 +61,15 @@ fun GuitarScreen(
                 .height(210.dp),
         )
 
+        Spacer(Modifier.height(4.dp))
+        SpectrumView(
+            spectrum = state.spectrum,
+            detectedFrequency = state.detectedFrequency,
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(80.dp),
+        )
+
         Spacer(Modifier.height(8.dp))
         StringSelector(
             activeString = state.activeString,

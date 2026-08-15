@@ -5,7 +5,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.tunner.audio.AudioInput
 import com.example.tunner.audio.LowPassFilter
-import com.example.tunner.pitch.YinPitchDetector
+import com.example.tunner.pitch.HybridPitchDetector
 import com.example.tunner.settings.AccentColor
 import com.example.tunner.settings.AppSettings
 import com.example.tunner.settings.Sensitivity
@@ -33,7 +33,7 @@ class TunerViewModel(application: Application) : AndroidViewModel(application) {
     private val settingsRepository = SettingsRepository(application)
     val settings: StateFlow<AppSettings> = settingsRepository.settings
 
-    private val detector = YinPitchDetector()
+    private val detector = HybridPitchDetector()
     private val filter = LowPassFilter()
     private val audioInput = AudioInput(SAMPLE_RATE)
     private var collectJob: Job? = null
@@ -109,6 +109,7 @@ class TunerViewModel(application: Application) : AndroidViewModel(application) {
         filter.process(window, s.filterStrength)
 
         val pitch = detector.detect(window, SAMPLE_RATE)
+        val spectrum = detector.lastSpectrum?.toList() ?: emptyList()
         if (pitch == null || pitch.confidence < s.sensitivity.confidence) {
             freqWindow.clear()
             _state.update { it.copy(
@@ -118,6 +119,7 @@ class TunerViewModel(application: Application) : AndroidViewModel(application) {
                 midi = null,
                 cents = null,
                 confidence = 0.0,
+                spectrum = spectrum,
                 activeString = if (it.mode == TunerMode.GUITAR) it.selectedString else null,
             ) }
             return
@@ -148,6 +150,7 @@ class TunerViewModel(application: Application) : AndroidViewModel(application) {
                 midi = note.midi,
                 cents = cents,
                 confidence = pitch.confidence,
+                spectrum = spectrum,
                 activeString = activeString,
             )
         }
@@ -163,6 +166,7 @@ class TunerViewModel(application: Application) : AndroidViewModel(application) {
                 midi = null,
                 cents = null,
                 confidence = 0.0,
+                spectrum = emptyList(),
                 activeString = if (it.mode == TunerMode.GUITAR) it.selectedString else null,
             )
         }

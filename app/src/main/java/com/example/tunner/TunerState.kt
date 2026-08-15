@@ -28,6 +28,9 @@ data class TunerState(
 
     // Concert pitch reference.
     val referenceA4: Double = 440.0,
+
+    // Normalized magnitude spectrum (display bands), for visualization.
+    val spectrum: List<Float> = emptyList(),
 ) {
     /** True when the detected pitch is within a small window of the target. */
     val isInTune: Boolean
