@@ -1,0 +1,56 @@
+package com.example.tunner.settings
+
+import android.content.Context
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+
+/**
+ * Persists [AppSettings] in SharedPreferences and exposes it as a [StateFlow].
+ *
+ * Writes are write-through: the flow is updated immediately and the value is
+ * saved asynchronously.
+ */
+class SettingsRepository(context: Context) {
+
+    private val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+
+    private val _settings = MutableStateFlow(load())
+    val settings: StateFlow<AppSettings> = _settings.asStateFlow()
+
+    fun setAccent(accent: AccentColor) = update { it.copy(accent = accent) }
+
+    fun setSensitivity(sensitivity: Sensitivity) = update { it.copy(sensitivity = sensitivity) }
+
+    fun setFilterStrength(strength: Float) =
+        update { it.copy(filterStrength = strength.coerceIn(0f, 1f)) }
+
+    private fun update(transform: (AppSettings) -> AppSettings) {
+        val next = transform(_settings.value)
+        if (next == _settings.value) return
+        _settings.value = next
+        prefs.edit()
+            .putString(KEY_ACCENT, next.accent.name)
+            .putString(KEY_SENSITIVITY, next.sensitivity.name)
+            .putFloat(KEY_FILTER, next.filterStrength)
+            .apply()
+    }
+
+    private fun load(): AppSettings {
+        val accent = runCatching {
+            AccentColor.valueOf(prefs.getString(KEY_ACCENT, null) ?: "")
+        }.getOrDefault(AccentColor.GREEN)
+        val sensitivity = runCatching {
+            Sensitivity.valueOf(prefs.getString(KEY_SENSITIVITY, null) ?: "")
+        }.getOrDefault(Sensitivity.MEDIUM)
+        val filter = prefs.getFloat(KEY_FILTER, 0.5f).coerceIn(0f, 1f)
+        return AppSettings(accent = accent, sensitivity = sensitivity, filterStrength = filter)
+    }
+
+    private companion object {
+        const val PREFS_NAME = "tuner_settings"
+        const val KEY_ACCENT = "accent"
+        const val KEY_SENSITIVITY = "sensitivity"
+        const val KEY_FILTER = "filterStrength"
+    }
+}

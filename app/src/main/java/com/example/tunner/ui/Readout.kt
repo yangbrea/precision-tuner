@@ -1,0 +1,93 @@
+package com.example.tunner.ui
+
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import com.example.tunner.TunerState
+import com.example.tunner.ui.theme.TunerFlat
+import com.example.tunner.ui.theme.TunerOnDarkMuted
+import com.example.tunner.ui.theme.TunerSharp
+import kotlin.math.abs
+import kotlin.math.roundToInt
+
+/** Formats cents as a signed, one-decimal string, locale-independent. */
+fun formatCents(cents: Double): String {
+    val tenths = (cents * 10).roundToInt()
+    val sign = if (tenths >= 0) "+" else "-"
+    val a = abs(tenths)
+    return "$sign${a / 10}.${a % 10} ¢"
+}
+
+/** Formats a frequency in Hz with one decimal, locale-independent. */
+fun formatFrequency(freq: Double): String {
+    val tenths = (freq * 10).roundToInt()
+    return "${tenths / 10}.${tenths % 10} Hz"
+}
+
+/**
+ * Shared readout: big note name + octave, cents verdict, and frequency.
+ */
+@Composable
+fun Readout(
+    noteName: String?,
+    octave: Int?,
+    cents: Double?,
+    frequency: Double?,
+    modifier: Modifier = Modifier,
+) {
+    val inTune = cents != null && abs(cents) <= TunerState.IN_TUNE_CENTS
+    val primary = MaterialTheme.colorScheme.primary
+    Column(
+        modifier = modifier,
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Row(verticalAlignment = Alignment.Bottom) {
+            Text(
+                text = noteName ?: "—",
+                fontSize = 88.sp,
+                fontWeight = FontWeight.Bold,
+                color = if (inTune) primary else MaterialTheme.colorScheme.onBackground,
+            )
+            if (noteName != null && octave != null) {
+                Text(
+                    text = octave.toString(),
+                    fontSize = 40.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = TunerOnDarkMuted,
+                    modifier = Modifier.padding(start = 4.dp, bottom = 14.dp),
+                )
+            }
+        }
+
+        Text(
+            text = when {
+                cents == null -> "等待输入…"
+                inTune -> "已调准"
+                cents < 0 -> "偏低 ${formatCents(cents)}"
+                else -> "偏高 ${formatCents(cents)}"
+            },
+            fontSize = 20.sp,
+            fontWeight = FontWeight.SemiBold,
+            color = when {
+                cents == null -> TunerOnDarkMuted
+                inTune -> primary
+                cents < 0 -> TunerFlat
+                else -> TunerSharp
+            },
+        )
+
+        Text(
+            text = frequency?.let { formatFrequency(it) } ?: "0.0 Hz",
+            fontSize = 18.sp,
+            color = if (frequency != null) TunerOnDarkMuted else TunerOnDarkMuted.copy(alpha = 0.4f),
+        )
+    }
+}

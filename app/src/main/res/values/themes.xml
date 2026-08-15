@@ -1,0 +1,7 @@
+<resources>
+    <!-- Compose draws everything; this theme only provides a plain window without an action bar. -->
+    <style name="Theme.Tunner" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:statusBarColor">#0E0E10</item>
+        <item name="android:windowBackground">#0E0E10</item>
+    </style>
+</resources>
