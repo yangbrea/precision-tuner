@@ -1,12 +1,15 @@
 package com.example.tunner
 
 import com.example.tunner.tuning.InstrumentCatalog
+import com.example.tunner.tuning.InstrumentString
 import com.example.tunner.tuning.NoteMapper
+import com.example.tunner.tuning.Tuning
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import kotlin.math.abs
 
 class InstrumentCatalogTest {
 
@@ -27,6 +30,52 @@ class InstrumentCatalogTest {
         assertEquals(6, g.nearestString(40)?.number) // E2 -> string 6
         assertEquals(1, g.nearestString(64)?.number) // E4 -> string 1
         assertEquals(5, g.nearestString(45)?.number) // A2 -> string 5
+    }
+
+    @Test
+    fun nearestStringUsesFrequencyDistanceWithinCurrentTuning() {
+        val guitar = InstrumentCatalog.tuning("guitar", "standard")!!
+        val dropD = InstrumentCatalog.tuning("guitar", "drop_d")!!
+        val halfDown = InstrumentCatalog.tuning("guitar", "half_down")!!
+        val ukulele = InstrumentCatalog.tuning("ukulele", "standard")!!
+
+        assertEquals("E2", guitar.nearestString(82.41)?.fullNote)
+        assertEquals("D2", dropD.nearestString(73.42)?.fullNote)
+        assertEquals("D#2", halfDown.nearestString(77.78)?.fullNote)
+        assertEquals("C4", ukulele.nearestString(261.63)?.fullNote)
+    }
+
+    @Test
+    fun e2CannotBeInTuneForViolin() {
+        val violin = InstrumentCatalog.tuning("violin", "standard")!!
+        val target = violin.nearestString(82.41)!!
+        val cents = target.centsFrom(82.41)
+
+        assertEquals("G3", target.fullNote)
+        assertTrue(abs(cents) > 5.0)
+    }
+
+    @Test
+    fun invalidFrequencyHasNoTarget() {
+        val tuning = InstrumentCatalog.tuning("guitar", "standard")!!
+        assertNull(tuning.nearestString(0.0))
+        assertNull(tuning.nearestString(Double.NaN))
+    }
+
+    @Test
+    fun customTuningUsesItsOwnTargets() {
+        val custom = Tuning(
+            id = "custom",
+            name = "Custom",
+            strings = listOf(
+                InstrumentString(1, "C", "C4", 60),
+                InstrumentString(2, "F", "F3", 53),
+            ),
+        )
+
+        val target = custom.nearestString(175.0)!!
+        assertEquals("F3", target.fullNote)
+        assertTrue(abs(target.centsFrom(175.0)) < 5.0)
     }
 
     @Test

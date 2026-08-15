@@ -64,7 +64,7 @@ fun InstrumentScreen(
     onSelectString: (Int?) -> Unit,
     onSelectInstrument: (String) -> Unit,
     onSelectTuning: (String) -> Unit,
-    onToggleReferenceTone: (Double) -> Unit,
+    onToggleReferenceTone: () -> Unit,
     onShiftCustomString: (Int, Int) -> Unit,
     onAddCustomString: () -> Unit,
     onRemoveCustomString: () -> Unit,
@@ -104,16 +104,18 @@ fun InstrumentScreen(
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
 
-        // Reference-tone button (always rendered + enabled; falls back to A4).
-        val refFreq = active?.frequency ?: state.detectedFrequency ?: 440.0
-        TextButton(onClick = { onToggleReferenceTone(refFreq) }) {
-            Icon(
-                imageVector = if (state.isReferenceTonePlaying) Icons.Filled.Stop else Icons.Filled.PlayArrow,
-                contentDescription = if (state.isReferenceTonePlaying) "停止参考音" else "播放参考音",
-                modifier = Modifier.size(18.dp),
-            )
-            Spacer(Modifier.width(6.dp))
-            Text(if (state.isReferenceTonePlaying) "停止参考音" else "参考音")
+        // Ear-training reference is available only for an explicit string target.
+        val selectedTarget = state.selectedString?.let { tuning?.byNumber(it) }
+        if (selectedTarget != null) {
+            TextButton(onClick = onToggleReferenceTone) {
+                Icon(
+                    imageVector = if (state.isReferenceTonePlaying) Icons.Filled.Stop else Icons.Filled.PlayArrow,
+                    contentDescription = if (state.isReferenceTonePlaying) "停止参考音" else "播放参考音",
+                    modifier = Modifier.size(18.dp),
+                )
+                Spacer(Modifier.width(6.dp))
+                Text(if (state.isReferenceTonePlaying) "停止参考音" else "参考音 ${selectedTarget.fullNote}")
+            }
         }
 
         Spacer(Modifier.height(8.dp))

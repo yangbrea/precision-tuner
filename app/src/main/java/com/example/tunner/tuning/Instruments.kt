@@ -1,6 +1,7 @@
 package com.example.tunner.tuning
 
 import kotlin.math.abs
+import kotlin.math.ln
 
 /**
  * One string (open course) of an instrument, in a particular tuning.
@@ -18,6 +19,10 @@ data class InstrumentString(
 ) {
     /** Equal-temperament frequency for the current A4 reference. */
     val frequency: Double get() = NoteMapper.frequencyFromMidi(midi)
+
+    /** Signed deviation of [detectedFrequency] from this string's target. */
+    fun centsFrom(detectedFrequency: Double): Double =
+        1200.0 * ln(detectedFrequency / frequency) / ln(2.0)
 }
 
 /** A named tuning of an instrument: an ordered list of open-string notes. */
@@ -29,6 +34,12 @@ data class Tuning(
     /** The string whose target note is closest to [midi], or null if empty. */
     fun nearestString(midi: Int): InstrumentString? =
         strings.minByOrNull { abs(it.midi - midi) }
+
+    /** The target string nearest to [frequency] on a logarithmic pitch scale. */
+    fun nearestString(frequency: Double): InstrumentString? {
+        if (!frequency.isFinite() || frequency <= 0.0) return null
+        return strings.minByOrNull { abs(ln(frequency / it.frequency)) }
+    }
 
     fun byNumber(number: Int): InstrumentString? = strings.firstOrNull { it.number == number }
 }
