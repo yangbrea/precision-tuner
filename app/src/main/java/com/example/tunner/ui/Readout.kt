@@ -13,7 +13,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.tunner.TunerState
 import com.example.tunner.ui.theme.TunerFlat
-import com.example.tunner.ui.theme.TunerOnDarkMuted
 import com.example.tunner.ui.theme.TunerSharp
 import kotlin.math.abs
 import kotlin.math.roundToInt
@@ -64,7 +63,7 @@ fun Readout(
                     fontSize = 40.sp,
                     fontWeight = FontWeight.Medium,
                     maxLines = 1,
-                    color = TunerOnDarkMuted,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(start = 4.dp, bottom = 14.dp),
                 )
             }
@@ -81,7 +80,7 @@ fun Readout(
             fontWeight = FontWeight.SemiBold,
             maxLines = 1,
             color = when {
-                cents == null -> TunerOnDarkMuted
+                cents == null -> MaterialTheme.colorScheme.onSurfaceVariant
                 inTune -> primary
                 cents < 0 -> TunerFlat
                 else -> TunerSharp
@@ -92,7 +91,7 @@ fun Readout(
             text = frequency?.let { formatFrequency(it) } ?: "0.0 Hz",
             fontSize = 18.sp,
             maxLines = 1,
-            color = if (frequency != null) TunerOnDarkMuted else TunerOnDarkMuted.copy(alpha = 0.4f),
+            color = if (frequency != null) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
         )
     }
 }

@@ -144,6 +144,49 @@ object InstrumentCatalog {
                 )),
             ),
         ),
+        Instrument(
+            id = "zhongruan",
+            name = "中阮",
+            defaultTuningId = "standard",
+            tunings = listOf(
+                Tuning("standard", "标准调弦 (G-D-G-D)", listOf(
+                    s(1, "D", "D4", 62), s(2, "G", "G3", 55),
+                    s(3, "D", "D3", 50), s(4, "G", "G2", 43),
+                )),
+            ),
+        ),
+        Instrument(
+            id = "pipa",
+            name = "琵琶",
+            defaultTuningId = "standard",
+            tunings = listOf(
+                Tuning("standard", "标准调弦 (A-D-E-A)", listOf(
+                    s(1, "A", "A3", 57), s(2, "E", "E3", 52),
+                    s(3, "D", "D3", 50), s(4, "A", "A2", 45),
+                )),
+            ),
+        ),
+        Instrument(
+            id = "erhu",
+            name = "二胡",
+            defaultTuningId = "standard",
+            tunings = listOf(
+                Tuning("standard", "标准调弦 (D-A)", listOf(
+                    s(1, "A", "A4", 69), s(2, "D", "D4", 62),
+                )),
+            ),
+        ),
+        Instrument(
+            id = "daruan",
+            name = "大阮",
+            defaultTuningId = "standard",
+            tunings = listOf(
+                Tuning("standard", "标准调弦 (D-A-D-A)", listOf(
+                    s(1, "A", "A3", 57), s(2, "D", "D3", 50),
+                    s(3, "A", "A2", 45), s(4, "D", "D2", 38),
+                )),
+            ),
+        ),
     )
 
     fun instrument(id: String): Instrument? = instruments.firstOrNull { it.id == id }

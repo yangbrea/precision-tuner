@@ -6,13 +6,17 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.tunner.audio.AudioInput
 import com.example.tunner.audio.LowPassFilter
+import com.example.tunner.audio.ReferenceToneEngine
 import com.example.tunner.pitch.HybridPitchDetector
 import com.example.tunner.settings.AccentColor
 import com.example.tunner.settings.AppSettings
 import com.example.tunner.settings.Sensitivity
 import com.example.tunner.settings.SettingsRepository
+import com.example.tunner.settings.ThemeMode
+import com.example.tunner.tuning.CustomTuningStore
 import com.example.tunner.tuning.InstrumentCatalog
 import com.example.tunner.tuning.NoteMapper
+import com.example.tunner.tuning.Tuning
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -21,6 +25,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlin.math.log
 
 /**
  * Owns the audio capture → pitch detection → note mapping pipeline and exposes
@@ -34,9 +39,13 @@ class TunerViewModel(application: Application) : AndroidViewModel(application) {
     private val settingsRepository = SettingsRepository(application)
     val settings: StateFlow<AppSettings> = settingsRepository.settings
 
+    private val customStore = CustomTuningStore(application)
+    val customMidis: StateFlow<List<Int>> = customStore.midis
+
     private val detector = HybridPitchDetector()
     private val filter = LowPassFilter()
     private val audioInput = AudioInput(SAMPLE_RATE)
+    private val referenceTone = ReferenceToneEngine()
     private var collectJob: Job? = null
 
     // Rolling window of recent valid frequencies for median smoothing.
@@ -59,6 +68,7 @@ class TunerViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun setMode(mode: TunerMode) {
+        stopReferenceTone()
         _state.update { it.copy(mode = mode) }
         resetDetection()
         // Pause capture on the metronome tab (so clicks aren't picked up), and
@@ -89,6 +99,8 @@ class TunerViewModel(application: Application) : AndroidViewModel(application) {
 
     fun updateFilterStrength(strength: Float) = settingsRepository.setFilterStrength(strength)
 
+    fun updateThemeMode(mode: ThemeMode) = settingsRepository.setThemeMode(mode)
+
     fun updateInstrument(instrumentId: String) {
         val defaultTuning = InstrumentCatalog.instrument(instrumentId)?.defaultTuningId ?: "standard"
         settingsRepository.setInstrument(instrumentId, defaultTuning)
@@ -100,6 +112,32 @@ class TunerViewModel(application: Application) : AndroidViewModel(application) {
         settingsRepository.setTuning(tuningId)
         _state.update { it.copy(selectedString = null) }
         freqWindow.clear()
+    }
+
+    /** Resolve the effective tuning, handling the custom tuning specially. */
+    fun resolveTuning(instrumentId: String, tuningId: String): Tuning? =
+        if (instrumentId == CustomTuningStore.CUSTOM_ID) customStore.tuning()
+        else InstrumentCatalog.tuning(instrumentId, tuningId)
+
+    fun shiftCustomString(index: Int, delta: Int) = customStore.shiftString(index, delta)
+
+    fun addCustomString() = customStore.addString()
+
+    fun removeCustomString() = customStore.removeString()
+
+    /** Play/stop the reference tone at [frequency] (Hz). */
+    fun toggleReferenceTone(frequency: Double) {
+        if (_state.value.isReferenceTonePlaying) {
+            stopReferenceTone()
+        } else {
+            referenceTone.start(frequency)
+            _state.update { it.copy(isReferenceTonePlaying = true) }
+        }
+    }
+
+    fun stopReferenceTone() {
+        referenceTone.stop()
+        _state.update { it.copy(isReferenceTonePlaying = false) }
     }
 
     fun startListening() {
@@ -131,13 +169,29 @@ class TunerViewModel(application: Application) : AndroidViewModel(application) {
         collectJob?.cancel()
         collectJob = null
         audioInput.stop()
-        _state.update { it.copy(isListening = false) }
+        referenceTone.stop()
+        _state.update { it.copy(isListening = false, isReferenceTonePlaying = false) }
         resetDetection()
     }
 
     private fun processWindow() {
         val s = settings.value
-        val pitch = detector.detect(window, SAMPLE_RATE)
+        val mode = _state.value.mode
+        val tuning = resolveTuning(s.instrumentId, s.tuningId)
+
+        // String lock: when a string is manually selected, constrain detection
+        // to that string's pitch (±~100 cents) for robustness against harmonics
+        // and other strings.
+        val selectedNumber = _state.value.selectedString
+        val lockedString = if (mode == TunerMode.INSTRUMENT && selectedNumber != null) {
+            tuning?.byNumber(selectedNumber)
+        } else null
+
+        val pitch = if (lockedString != null) {
+            detector.detectLocked(window, SAMPLE_RATE, lockedString.frequency)
+        } else {
+            detector.detect(window, SAMPLE_RATE)
+        }
         val spectrum = detector.lastSpectrum?.toList() ?: emptyList()
         val accepted = pitch != null && pitch.confidence >= s.sensitivity.confidence
 
@@ -175,10 +229,25 @@ class TunerViewModel(application: Application) : AndroidViewModel(application) {
 
         val sorted = freqWindow.sorted()
         val medianFreq = sorted[sorted.size / 2]
-
         val a4 = _state.value.referenceA4
-        val note = NoteMapper.noteFromFrequency(medianFreq, a4)
-        val cents = NoteMapper.cents(medianFreq, a4)
+
+        // Locked: report deviation from the selected string's target.
+        val noteName: String
+        val octave: Int
+        val midi: Int
+        val cents: Double
+        if (lockedString != null) {
+            noteName = lockedString.noteName
+            midi = lockedString.midi
+            octave = lockedString.midi / 12 - 1
+            cents = 1200.0 * log(medianFreq / lockedString.frequency, 2.0)
+        } else {
+            val note = NoteMapper.noteFromFrequency(medianFreq, a4)
+            noteName = note.name
+            octave = note.octave
+            midi = note.midi
+            cents = NoteMapper.cents(medianFreq, a4)
+        }
 
         logFrame(pitch.frequency, pitch.confidence, accepted = true)
 
@@ -186,15 +255,13 @@ class TunerViewModel(application: Application) : AndroidViewModel(application) {
             val activeString = when {
                 st.mode != TunerMode.INSTRUMENT -> null
                 st.selectedString != null -> st.selectedString
-                else -> InstrumentCatalog
-                    .tuning(s.instrumentId, s.tuningId)
-                    ?.nearestString(note.midi)?.number
+                else -> tuning?.nearestString(midi)?.number
             }
             st.copy(
                 detectedFrequency = medianFreq,
-                noteName = note.name,
-                octave = note.octave,
-                midi = note.midi,
+                noteName = noteName,
+                octave = octave,
+                midi = midi,
                 cents = cents,
                 confidence = pitch.confidence,
                 spectrum = spectrum,

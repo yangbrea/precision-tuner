@@ -2,11 +2,15 @@ package com.example.tunner.settings
 
 import androidx.compose.ui.graphics.Color
 
+/** Dark vs light app theme. */
+enum class ThemeMode { DARK, LIGHT }
+
 /** User-configurable app settings. */
 data class AppSettings(
     val accent: AccentColor = AccentColor.GREEN,
     val sensitivity: Sensitivity = Sensitivity.MEDIUM,
     val filterStrength: Float = 0.5f, // 0..1, 0 = off
+    val themeMode: ThemeMode = ThemeMode.DARK,
 
     // Selected instrument & tuning for the instrument tuner.
     val instrumentId: String = "guitar",

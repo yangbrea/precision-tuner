@@ -33,9 +33,7 @@ import androidx.compose.ui.unit.sp
 import com.example.tunner.settings.AccentColor
 import com.example.tunner.settings.AppSettings
 import com.example.tunner.settings.Sensitivity
-import com.example.tunner.ui.theme.TunerOnDark
-import com.example.tunner.ui.theme.TunerOnDarkMuted
-import com.example.tunner.ui.theme.TunerSurfaceVariant
+import com.example.tunner.settings.ThemeMode
 import kotlin.math.roundToInt
 
 @Composable
@@ -44,6 +42,7 @@ fun SettingsScreen(
     onAccentChange: (AccentColor) -> Unit,
     onSensitivityChange: (Sensitivity) -> Unit,
     onFilterChange: (Float) -> Unit,
+    onThemeModeChange: (ThemeMode) -> Unit,
 ) {
     Column(
         modifier = Modifier
@@ -51,6 +50,10 @@ fun SettingsScreen(
             .verticalScroll(rememberScrollState())
             .padding(horizontal = 20.dp, vertical = 8.dp),
     ) {
+        SectionTitle("主题模式")
+        ThemeModeRow(selected = settings.themeMode, onSelect = onThemeModeChange)
+
+        Spacer(Modifier.height(28.dp))
         SectionTitle("主题色")
         AccentRow(selected = settings.accent, onSelect = onAccentChange)
 
@@ -72,7 +75,7 @@ private fun SectionTitle(title: String) {
         text = title,
         fontSize = 15.sp,
         fontWeight = FontWeight.SemiBold,
-        color = TunerOnDark,
+        color = MaterialTheme.colorScheme.onBackground,
     )
     Spacer(Modifier.height(12.dp))
 }
@@ -80,7 +83,40 @@ private fun SectionTitle(title: String) {
 @Composable
 private fun Hint(text: String) {
     Spacer(Modifier.height(8.dp))
-    Text(text = text, fontSize = 12.sp, color = TunerOnDarkMuted)
+    Text(text = text, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+}
+
+@Composable
+private fun ThemeModeRow(selected: ThemeMode, onSelect: (ThemeMode) -> Unit) {
+    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        ThemeMode.entries.forEach { mode ->
+            val isSelected = mode == selected
+            val accent = MaterialTheme.colorScheme.primary
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .background(
+                        if (isSelected) accent.copy(alpha = 0.2f) else MaterialTheme.colorScheme.surfaceVariant,
+                        RoundedCornerShape(12.dp),
+                    )
+                    .border(
+                        width = 1.5.dp,
+                        color = if (isSelected) accent else MaterialTheme.colorScheme.outlineVariant,
+                        shape = RoundedCornerShape(12.dp),
+                    )
+                    .clickable { onSelect(mode) }
+                    .padding(vertical = 12.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    text = if (mode == ThemeMode.DARK) "深色" else "浅色",
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = if (isSelected) accent else MaterialTheme.colorScheme.onBackground,
+                )
+            }
+        }
+    }
 }
 
 @Composable
@@ -128,12 +164,12 @@ private fun SensitivityRow(selected: Sensitivity, onSelect: (Sensitivity) -> Uni
                 modifier = Modifier
                     .weight(1f)
                     .background(
-                        if (isSelected) accent.copy(alpha = 0.2f) else TunerSurfaceVariant,
+                        if (isSelected) accent.copy(alpha = 0.2f) else MaterialTheme.colorScheme.surfaceVariant,
                         RoundedCornerShape(12.dp),
                     )
                     .border(
                         width = 1.5.dp,
-                        color = if (isSelected) accent else Color(0xFF2A2A30),
+                        color = if (isSelected) accent else MaterialTheme.colorScheme.outlineVariant,
                         shape = RoundedCornerShape(12.dp),
                     )
                     .clickable { onSelect(s) }
@@ -144,7 +180,7 @@ private fun SensitivityRow(selected: Sensitivity, onSelect: (Sensitivity) -> Uni
                     text = s.label,
                     fontSize = 16.sp,
                     fontWeight = FontWeight.Bold,
-                    color = if (isSelected) accent else TunerOnDark,
+                    color = if (isSelected) accent else MaterialTheme.colorScheme.onBackground,
                 )
             }
         }
@@ -158,7 +194,7 @@ private fun FilterSlider(value: Float, onChange: (Float) -> Unit) {
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text(text = "关", fontSize = 13.sp, color = TunerOnDarkMuted)
+            Text(text = "关", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Slider(
                 value = value,
                 onValueChange = onChange,
@@ -167,12 +203,12 @@ private fun FilterSlider(value: Float, onChange: (Float) -> Unit) {
                     .weight(1f)
                     .padding(horizontal = 8.dp),
             )
-            Text(text = "强", fontSize = 13.sp, color = TunerOnDarkMuted)
+            Text(text = "强", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         Text(
             text = "当前 ${(value * 100).roundToInt()}%",
             fontSize = 13.sp,
-            color = TunerOnDarkMuted,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.align(Alignment.CenterHorizontally),
         )
     }

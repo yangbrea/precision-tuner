@@ -28,15 +28,24 @@ class YinPitchDetector(
     override fun detect(buffer: ShortArray, sampleRate: Int): Pitch? =
         detectInternal(buffer, sampleRate, searchRange = null)
 
-    /** Refine a coarse frequency estimate by searching lags within ±15% of it. */
-    fun detectGuided(buffer: ShortArray, sampleRate: Int, coarseFrequency: Double): Pitch? {
+    /** Refine a coarse frequency estimate by searching lags within ±[fraction] of it. */
+    fun detectGuided(
+        buffer: ShortArray,
+        sampleRate: Int,
+        coarseFrequency: Double,
+        fraction: Double = 0.15,
+    ): Pitch? {
         val tauCenter = (sampleRate / coarseFrequency).roundToInt()
-        val margin = maxOf(24, (tauCenter * 0.15).toInt())
+        val margin = maxOf(8, (tauCenter * fraction).toInt())
         val lo = maxOf(1, tauCenter - margin)
         val hi = minOf(maxTau - 1, tauCenter + margin)
         if (lo > hi) return null
         return detectInternal(buffer, sampleRate, searchRange = lo..hi)
     }
+
+    /** Tight search around a target pitch (~±100 cents) for string-locked tuning. */
+    fun detectLocked(buffer: ShortArray, sampleRate: Int, targetFrequency: Double): Pitch? =
+        detectGuided(buffer, sampleRate, targetFrequency, fraction = LOCK_FRACTION)
 
     private fun detectInternal(buffer: ShortArray, sampleRate: Int, searchRange: IntRange?): Pitch? {
         val n = buffer.size
@@ -148,5 +157,6 @@ class YinPitchDetector(
         const val SILENCE_RMS = 1e-4          // ~ -80 dBFS gate
         const val MAX_FALLBACK_CMNDF = 0.6    // accept confidence >= 0.4 (reject noise)
         const val MIN_FREQUENCY = 20.0        // Hz
+        const val LOCK_FRACTION = 0.06        // ≈ ±100 cents for string lock
     }
 }

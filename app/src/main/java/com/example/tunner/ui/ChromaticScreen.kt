@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -14,7 +15,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.tunner.TunerState
-import com.example.tunner.ui.theme.TunerOnDarkMuted
 import kotlin.math.roundToInt
 
 @Composable
@@ -31,7 +31,7 @@ fun ChromaticScreen(
         Text(
             text = "十二平均律 · A4 = ${state.referenceA4.roundToInt()} Hz",
             fontSize = 16.sp,
-            color = TunerOnDarkMuted,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
 
         Spacer(Modifier.height(8.dp))
@@ -65,7 +65,7 @@ fun ChromaticScreen(
             Text(
                 text = "基准音 A4（默认 440 Hz）",
                 fontSize = 13.sp,
-                color = TunerOnDarkMuted,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             Slider(
                 value = state.referenceA4.toFloat(),
@@ -76,7 +76,7 @@ fun ChromaticScreen(
             Text(
                 text = "${state.referenceA4.roundToInt()} Hz",
                 fontSize = 14.sp,
-                color = TunerOnDarkMuted,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.align(Alignment.CenterHorizontally),
             )
         }

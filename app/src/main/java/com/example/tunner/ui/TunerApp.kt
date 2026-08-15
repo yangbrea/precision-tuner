@@ -21,6 +21,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
@@ -43,13 +44,13 @@ import com.example.tunner.TunerMode
 import com.example.tunner.TunerState
 import com.example.tunner.TunerViewModel
 import com.example.tunner.metronome.MetronomeViewModel
-import com.example.tunner.ui.theme.TunerOnDarkMuted
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TunerApp(viewModel: TunerViewModel, metronomeViewModel: MetronomeViewModel) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val settings by viewModel.settings.collectAsStateWithLifecycle()
+    val customMidis by viewModel.customMidis.collectAsStateWithLifecycle()
     val metronomeState by metronomeViewModel.state.collectAsStateWithLifecycle()
     val context = LocalContext.current
     var permissionRequested by rememberSaveable { mutableStateOf(false) }
@@ -120,12 +121,15 @@ fun TunerApp(viewModel: TunerViewModel, metronomeViewModel: MetronomeViewModel) 
                     onAccentChange = viewModel::updateAccent,
                     onSensitivityChange = viewModel::updateSensitivity,
                     onFilterChange = viewModel::updateFilterStrength,
+                    onThemeModeChange = viewModel::updateThemeMode,
                 )
                 state.mode == TunerMode.METRONOME -> MetronomeScreen(
                     state = metronomeState,
                     onToggle = metronomeViewModel::toggle,
                     onSetBpm = metronomeViewModel::setBpm,
                     onSetBeatsPerBar = metronomeViewModel::setBeatsPerBar,
+                    onSetSubdivision = metronomeViewModel::setSubdivision,
+                    onSetNoteValue = metronomeViewModel::setNoteValue,
                     onTap = metronomeViewModel::tap,
                     onSetVolume = metronomeViewModel::setVolume,
                 )
@@ -135,9 +139,15 @@ fun TunerApp(viewModel: TunerViewModel, metronomeViewModel: MetronomeViewModel) 
                 state.mode == TunerMode.INSTRUMENT -> InstrumentScreen(
                     state = state,
                     settings = settings,
+                    tuning = viewModel.resolveTuning(settings.instrumentId, settings.tuningId),
+                    customMidis = customMidis,
                     onSelectString = viewModel::selectString,
                     onSelectInstrument = viewModel::updateInstrument,
                     onSelectTuning = viewModel::updateTuning,
+                    onToggleReferenceTone = viewModel::toggleReferenceTone,
+                    onShiftCustomString = viewModel::shiftCustomString,
+                    onAddCustomString = viewModel::addCustomString,
+                    onRemoveCustomString = viewModel::removeCustomString,
                 )
                 else -> ChromaticScreen(
                     state = state,
@@ -187,9 +197,9 @@ private fun PermissionDenied(onRequest: () -> Unit) {
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center,
         ) {
-            Text(text = "调音器需要使用麦克风", color = TunerOnDarkMuted)
+            Text(text = "调音器需要使用麦克风", color = MaterialTheme.colorScheme.onSurfaceVariant)
             Spacer(Modifier.height(4.dp))
-            Text(text = "请授予录音权限以开始调音", color = TunerOnDarkMuted)
+            Text(text = "请授予录音权限以开始调音", color = MaterialTheme.colorScheme.onSurfaceVariant)
             Spacer(Modifier.height(16.dp))
             Button(onClick = onRequest) {
                 Text("授予权限")

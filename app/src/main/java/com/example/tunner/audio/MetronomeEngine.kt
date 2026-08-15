@@ -17,6 +17,7 @@ class MetronomeEngine {
 
     private val accentClick = ClickSound.generate(ClickSound.ACCENT_FREQ)
     private val normalClick = ClickSound.generate(ClickSound.NORMAL_FREQ)
+    private val subdivisionClick = ClickSound.generate(ClickSound.SUBDIVISION_FREQ)
 
     fun start() {
         if (track != null) return
@@ -42,9 +43,13 @@ class MetronomeEngine {
         track = t
     }
 
-    fun playClick(accent: Boolean, volume: Float) {
+    fun playClick(accent: Boolean, subdivision: Boolean, volume: Float) {
         val t = track ?: return
-        val src = if (accent) accentClick else normalClick
+        val src = when {
+            accent -> accentClick
+            subdivision -> subdivisionClick
+            else -> normalClick
+        }
         val buf = scale(src, volume)
         t.write(buf, 0, buf.size)
     }

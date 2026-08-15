@@ -12,16 +12,25 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Remove
+import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -32,31 +41,38 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.tunner.TunerState
 import com.example.tunner.settings.AppSettings
+import com.example.tunner.tuning.CustomTuningStore
 import com.example.tunner.tuning.Instrument
 import com.example.tunner.tuning.InstrumentCatalog
 import com.example.tunner.tuning.InstrumentString
+import com.example.tunner.tuning.NoteMapper
 import com.example.tunner.tuning.Tuning
 import com.example.tunner.ui.theme.TunerAccent
-import com.example.tunner.ui.theme.TunerOnDark
-import com.example.tunner.ui.theme.TunerOnDarkMuted
-import com.example.tunner.ui.theme.TunerSurfaceVariant
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun InstrumentScreen(
     state: TunerState,
     settings: AppSettings,
+    tuning: Tuning?,
+    customMidis: List<Int>,
     onSelectString: (Int?) -> Unit,
     onSelectInstrument: (String) -> Unit,
     onSelectTuning: (String) -> Unit,
+    onToggleReferenceTone: (Double) -> Unit,
+    onShiftCustomString: (Int, Int) -> Unit,
+    onAddCustomString: () -> Unit,
+    onRemoveCustomString: () -> Unit,
 ) {
-    val instrument = InstrumentCatalog.instrument(settings.instrumentId)
-    val tuning = InstrumentCatalog.tuning(settings.instrumentId, settings.tuningId)
+    val isCustom = settings.instrumentId == CustomTuningStore.CUSTOM_ID
+    val instrumentName = if (isCustom) "自定义" else InstrumentCatalog.instrument(settings.instrumentId)?.name ?: "?"
     var showPicker by remember { mutableStateOf(false) }
+    var showEditor by remember { mutableStateOf(false) }
 
     Column(
         modifier = Modifier
@@ -72,12 +88,12 @@ fun InstrumentScreen(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(
-                text = "${instrument?.name ?: "?"} · ${tuning?.name ?: "?"}",
+                text = "$instrumentName · ${tuning?.name ?: "?"}",
                 fontSize = 16.sp,
                 fontWeight = FontWeight.SemiBold,
-                color = TunerOnDark,
+                color = MaterialTheme.colorScheme.onBackground,
             )
-            Icon(Icons.Filled.ArrowDropDown, contentDescription = "选择乐器", tint = TunerOnDarkMuted)
+            Icon(Icons.Filled.ArrowDropDown, contentDescription = "选择乐器", tint = MaterialTheme.colorScheme.onSurfaceVariant)
         }
 
         val active = state.activeString?.let { tuning?.byNumber(it) }
@@ -85,8 +101,22 @@ fun InstrumentScreen(
             text = active?.let { "第${it.number}弦 · ${it.fullNote}" } ?: "自动识别",
             fontSize = 16.sp,
             maxLines = 1,
-            color = TunerOnDarkMuted,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
+
+        // Reference-tone (ear tuning) button for the active string / detected note.
+        val refFreq = active?.frequency ?: state.detectedFrequency
+        if (refFreq != null) {
+            TextButton(onClick = { onToggleReferenceTone(refFreq) }) {
+                Icon(
+                    imageVector = if (state.isReferenceTonePlaying) Icons.Filled.Stop else Icons.Filled.PlayArrow,
+                    contentDescription = if (state.isReferenceTonePlaying) "停止参考音" else "播放参考音",
+                    modifier = Modifier.size(18.dp),
+                )
+                Spacer(Modifier.width(6.dp))
+                Text(if (state.isReferenceTonePlaying) "停止参考音" else "参考音")
+            }
+        }
 
         Spacer(Modifier.height(8.dp))
         Readout(
@@ -123,11 +153,17 @@ fun InstrumentScreen(
             )
         }
 
+        if (isCustom) {
+            TextButton(onClick = { showEditor = true }) {
+                Text("编辑调弦")
+            }
+        }
+
         Spacer(Modifier.weight(1f))
         Text(
             text = "点选某根弦可手动调音，再次点选回到自动识别",
             fontSize = 12.sp,
-            color = TunerOnDarkMuted,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
     }
 
@@ -141,6 +177,20 @@ fun InstrumentScreen(
                 onSelectTuning(t.id)
                 showPicker = false
             },
+            onSelectCustom = {
+                onSelectInstrument(CustomTuningStore.CUSTOM_ID)
+                showPicker = false
+            },
+        )
+    }
+
+    if (showEditor) {
+        CustomTuningEditor(
+            midis = customMidis,
+            onShift = onShiftCustomString,
+            onAdd = onAddCustomString,
+            onRemove = onRemoveCustomString,
+            onDismiss = { showEditor = false },
         )
     }
 }
@@ -163,14 +213,14 @@ private fun StringSelector(
             val isSelected = selectedString == s.number
             val background = when {
                 isActive && inTune -> primary.copy(alpha = 0.25f)
-                isActive -> TunerSurfaceVariant
+                isActive -> MaterialTheme.colorScheme.surfaceVariant
                 else -> Color.Transparent
             }
             val border = when {
                 isActive && inTune -> primary
                 isSelected -> TunerAccent
-                isActive -> TunerOnDarkMuted
-                else -> Color(0xFF2A2A30)
+                isActive -> MaterialTheme.colorScheme.onSurfaceVariant
+                else -> MaterialTheme.colorScheme.outlineVariant
             }
             Column(
                 modifier = Modifier
@@ -185,14 +235,14 @@ private fun StringSelector(
                     text = s.number.toString(),
                     fontSize = 13.sp,
                     maxLines = 1,
-                    color = if (isActive) TunerOnDark else TunerOnDarkMuted,
+                    color = if (isActive) MaterialTheme.colorScheme.onBackground else MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 Text(
                     text = s.noteName,
                     fontSize = 22.sp,
                     fontWeight = FontWeight.Bold,
                     maxLines = 1,
-                    color = if (isActive && inTune) primary else TunerOnDark,
+                    color = if (isActive && inTune) primary else MaterialTheme.colorScheme.onBackground,
                 )
             }
         }
@@ -206,6 +256,7 @@ private fun InstrumentPicker(
     currentTuningId: String,
     onDismiss: () -> Unit,
     onSelect: (Instrument, Tuning) -> Unit,
+    onSelectCustom: () -> Unit,
 ) {
     ModalBottomSheet(onDismissRequest = onDismiss) {
         Column(
@@ -219,15 +270,32 @@ private fun InstrumentPicker(
                 text = "选择乐器与调弦",
                 fontSize = 18.sp,
                 fontWeight = FontWeight.Bold,
-                color = TunerOnDark,
+                color = MaterialTheme.colorScheme.onBackground,
             )
             Spacer(Modifier.height(12.dp))
+
+            // Custom tuning entry.
+            Text(
+                text = "自定义",
+                fontSize = 15.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onBackground,
+            )
+            Spacer(Modifier.height(8.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                TuningChip(
+                    label = "自定义调弦",
+                    selected = currentInstrumentId == CustomTuningStore.CUSTOM_ID,
+                ) { onSelectCustom() }
+            }
+            Spacer(Modifier.height(16.dp))
+
             InstrumentCatalog.instruments.forEach { inst ->
                 Text(
                     text = inst.name,
                     fontSize = 15.sp,
                     fontWeight = FontWeight.SemiBold,
-                    color = TunerOnDark,
+                    color = MaterialTheme.colorScheme.onBackground,
                 )
                 Spacer(Modifier.height(8.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -248,10 +316,10 @@ private fun TuningChip(label: String, selected: Boolean, onClick: () -> Unit) {
     Box(
         modifier = Modifier
             .clip(RoundedCornerShape(10.dp))
-            .background(if (selected) primary.copy(alpha = 0.2f) else TunerSurfaceVariant)
+            .background(if (selected) primary.copy(alpha = 0.2f) else MaterialTheme.colorScheme.surfaceVariant)
             .border(
                 width = 1.5.dp,
-                color = if (selected) primary else Color(0xFF2A2A30),
+                color = if (selected) primary else MaterialTheme.colorScheme.outlineVariant,
                 shape = RoundedCornerShape(10.dp),
             )
             .clickable(onClick = onClick)
@@ -260,7 +328,80 @@ private fun TuningChip(label: String, selected: Boolean, onClick: () -> Unit) {
         Text(
             text = label,
             fontSize = 13.sp,
-            color = if (selected) primary else TunerOnDark,
+            color = if (selected) primary else MaterialTheme.colorScheme.onBackground,
         )
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun CustomTuningEditor(
+    midis: List<Int>,
+    onShift: (Int, Int) -> Unit,
+    onAdd: () -> Unit,
+    onRemove: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    ModalBottomSheet(onDismissRequest = onDismiss) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 20.dp)
+                .padding(bottom = 32.dp),
+        ) {
+            Text(
+                text = "编辑自定义调弦",
+                fontSize = 18.sp,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onBackground,
+            )
+            Spacer(Modifier.height(12.dp))
+
+            midis.forEachIndexed { index, midi ->
+                val name = NoteMapper.NOTE_NAMES[((midi % 12) + 12) % 12]
+                val octave = midi / 12 - 1
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        text = "第${index + 1}弦",
+                        fontSize = 15.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.weight(1f),
+                    )
+                    IconButton(onClick = { onShift(index, -1) }) {
+                        Icon(Icons.Filled.Remove, contentDescription = "降半音")
+                    }
+                    Text(
+                        text = "$name$octave",
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.Bold,
+                        textAlign = TextAlign.Center,
+                        color = MaterialTheme.colorScheme.onBackground,
+                        modifier = Modifier.width(64.dp),
+                    )
+                    IconButton(onClick = { onShift(index, 1) }) {
+                        Icon(Icons.Filled.Add, contentDescription = "升半音")
+                    }
+                }
+            }
+
+            Spacer(Modifier.height(16.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                OutlinedButton(onClick = onAdd, modifier = Modifier.weight(1f)) {
+                    Text("添加弦")
+                }
+                OutlinedButton(onClick = onRemove, modifier = Modifier.weight(1f)) {
+                    Text("删除弦")
+                }
+            }
+        }
     }
 }

@@ -13,6 +13,7 @@ object ClickSound {
     const val SAMPLE_RATE = 44100
     const val ACCENT_FREQ = 2000.0 // beat 1 (accent)
     const val NORMAL_FREQ = 1100.0 // other beats
+    const val SUBDIVISION_FREQ = 800.0 // sub-beats (softer)
 
     private const val DECAY_RATE = 200.0 // ~63% decay in 5 ms
 

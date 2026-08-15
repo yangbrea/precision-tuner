@@ -48,6 +48,10 @@ class HybridPitchDetector(
         return yin.detect(buffer, sampleRate)
     }
 
+    /** String-locked detection: refine YIN directly around [targetFrequency]. */
+    fun detectLocked(buffer: ShortArray, sampleRate: Int, targetFrequency: Double): Pitch? =
+        yin.detectLocked(buffer, sampleRate, targetFrequency)
+
     private fun coarseFundamental(
         buffer: ShortArray,
         sampleRate: Int,

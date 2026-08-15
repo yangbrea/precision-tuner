@@ -1,8 +1,11 @@
 package com.example.tunner.ui
 
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -11,8 +14,6 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.unit.dp
 import com.example.tunner.ui.theme.TunerFlat
-import com.example.tunner.ui.theme.TunerOnDark
-import com.example.tunner.ui.theme.TunerOnDarkMuted
 import com.example.tunner.ui.theme.TunerSharp
 import kotlin.math.abs
 import kotlin.math.cos
@@ -36,11 +37,25 @@ fun TunerGauge(
     val inTune = cents != null && abs(cents) <= IN_TUNE_CENTS
     val accent = MaterialTheme.colorScheme.primary
     val needleColor = when {
-        cents == null -> TunerOnDarkMuted
+        cents == null -> MaterialTheme.colorScheme.onSurfaceVariant
         inTune -> accent
         cents < 0 -> TunerFlat
         else -> TunerSharp
     }
+
+    // Smooth the needle: animate toward the current (clamped) reading so it
+    // glides instead of snapping on every frame.
+    val targetCents = (cents?.coerceIn(MIN_CENTS, MAX_CENTS) ?: 0.0).toFloat()
+    val animatedCents by animateFloatAsState(
+        targetValue = targetCents,
+        animationSpec = tween(durationMillis = 90),
+        label = "needle",
+    )
+
+    // Colors read before the Canvas (not accessible inside DrawScope).
+    val dialColor = MaterialTheme.colorScheme.surfaceVariant
+    val tickCenterColor = MaterialTheme.colorScheme.onBackground
+    val tickMinorColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
 
     Canvas(modifier = modifier) {
         val cx = size.width / 2f
@@ -49,7 +64,7 @@ fun TunerGauge(
 
         // Dial arc.
         drawArc(
-            color = Color(0xFF26262C),
+            color = dialColor,
             startAngle = 180f,
             sweepAngle = 180f,
             useCenter = false,
@@ -79,7 +94,7 @@ fun TunerGauge(
             val angle = angleFor(c.toDouble())
             val p1 = pointAt(cx, cy, tickOuter, angle)
             val p2 = pointAt(cx, cy, inner, angle)
-            val tickColor = if (c == 0) TunerOnDark else Color(0xFF4A4A52)
+            val tickColor = if (c == 0) tickCenterColor else tickMinorColor
             drawLine(
                 color = tickColor,
                 start = p1,
@@ -90,13 +105,8 @@ fun TunerGauge(
             c += 5
         }
 
-        // Needle.
-        val clamped = cents?.coerceIn(MIN_CENTS, MAX_CENTS)
-        val tip = if (clamped != null) {
-            pointAt(cx, cy, radius - 28.dp.toPx(), angleFor(clamped))
-        } else {
-            pointAt(cx, cy, radius - 28.dp.toPx(), angleFor(0.0))
-        }
+        // Needle (uses the animated value for smooth motion).
+        val tip = pointAt(cx, cy, radius - 28.dp.toPx(), angleFor(animatedCents.toDouble()))
         drawLine(
             color = needleColor,
             start = Offset(cx, cy),

@@ -1,6 +1,8 @@
 package com.example.tunner.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -12,6 +14,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.PlayArrow
@@ -29,13 +32,12 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.tunner.metronome.MetronomeState
-import com.example.tunner.ui.theme.TunerOnDark
-import com.example.tunner.ui.theme.TunerOnDarkMuted
 
 @Composable
 fun MetronomeScreen(
@@ -43,6 +45,8 @@ fun MetronomeScreen(
     onToggle: () -> Unit,
     onSetBpm: (Int) -> Unit,
     onSetBeatsPerBar: (Int) -> Unit,
+    onSetSubdivision: (Int) -> Unit,
+    onSetNoteValue: (Int) -> Unit,
     onTap: () -> Unit,
     onSetVolume: (Float) -> Unit,
 ) {
@@ -58,9 +62,9 @@ fun MetronomeScreen(
             text = state.bpm.toString(),
             fontSize = 96.sp,
             fontWeight = FontWeight.Bold,
-            color = TunerOnDark,
+            color = MaterialTheme.colorScheme.onBackground,
         )
-        Text(text = "BPM", fontSize = 14.sp, color = TunerOnDarkMuted)
+        Text(text = "BPM", fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
 
         Spacer(Modifier.height(8.dp))
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -87,12 +91,28 @@ fun MetronomeScreen(
                 Icon(Icons.Filled.Remove, contentDescription = "减少拍数")
             }
             Text(
-                text = "每小节 ${state.beatsPerBar} 拍",
+                text = "每小节 ${state.beatsPerBar}/${state.noteValue} 拍",
                 fontSize = 16.sp,
-                color = TunerOnDark,
+                color = MaterialTheme.colorScheme.onBackground,
             )
             IconButton(onClick = { onSetBeatsPerBar(state.beatsPerBar + 1) }) {
                 Icon(Icons.Filled.Add, contentDescription = "增加拍数")
+            }
+        }
+
+        // Time-signature denominator (4 or 8) → compound meters.
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            listOf(4, 8).forEach { nv ->
+                val selected = state.noteValue == nv
+                Chip(label = nv.toString(), selected = selected, onClick = { onSetNoteValue(nv) })
+            }
+        }
+
+        // Subdivision (none / eighths / triplets / sixteenths).
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            val options = listOf(1 to "无", 2 to "八分", 3 to "三连音", 4 to "十六分")
+            options.forEach { (n, label) ->
+                Chip(label = label, selected = state.subdivision == n, onClick = { onSetSubdivision(n) })
             }
         }
 
@@ -106,8 +126,8 @@ fun MetronomeScreen(
                 val color = when {
                     isCurrent && isAccent -> primary
                     isCurrent -> primary.copy(alpha = 0.6f)
-                    isAccent -> TunerOnDark
-                    else -> TunerOnDark.copy(alpha = 0.25f)
+                    isAccent -> MaterialTheme.colorScheme.onBackground
+                    else -> MaterialTheme.colorScheme.onBackground.copy(alpha = 0.25f)
                 }
                 Box(
                     modifier = Modifier
@@ -136,7 +156,7 @@ fun MetronomeScreen(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Icon(Icons.AutoMirrored.Filled.VolumeDown, contentDescription = null, tint = TunerOnDarkMuted)
+            Icon(Icons.AutoMirrored.Filled.VolumeDown, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
             Slider(
                 value = state.volume,
                 onValueChange = onSetVolume,
@@ -145,7 +165,26 @@ fun MetronomeScreen(
                     .weight(1f)
                     .padding(horizontal = 8.dp),
             )
-            Icon(Icons.AutoMirrored.Filled.VolumeUp, contentDescription = null, tint = TunerOnDarkMuted)
+            Icon(Icons.AutoMirrored.Filled.VolumeUp, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
         }
+    }
+}
+
+@Composable
+private fun Chip(label: String, selected: Boolean, onClick: () -> Unit) {
+    val primary = MaterialTheme.colorScheme.primary
+    Box(
+        modifier = Modifier
+            .clip(RoundedCornerShape(10.dp))
+            .background(if (selected) primary.copy(alpha = 0.2f) else MaterialTheme.colorScheme.surfaceVariant)
+            .border(
+                width = 1.5.dp,
+                color = if (selected) primary else MaterialTheme.colorScheme.outlineVariant,
+                shape = RoundedCornerShape(10.dp),
+            )
+            .clickable(onClick = onClick)
+            .padding(horizontal = 12.dp, vertical = 8.dp),
+    ) {
+        Text(label, fontSize = 13.sp, color = if (selected) primary else MaterialTheme.colorScheme.onBackground)
     }
 }

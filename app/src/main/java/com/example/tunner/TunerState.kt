@@ -31,6 +31,9 @@ data class TunerState(
 
     // Normalized magnitude spectrum (display bands), for visualization.
     val spectrum: List<Float> = emptyList(),
+
+    // Reference tone playback state (ear tuning).
+    val isReferenceTonePlaying: Boolean = false,
 ) {
     /** True when the detected pitch is within a small window of the target. */
     val isInTune: Boolean

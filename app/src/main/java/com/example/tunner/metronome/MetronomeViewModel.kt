@@ -38,14 +38,23 @@ class MetronomeViewModel(application: Application) : AndroidViewModel(applicatio
             var nextNanos = System.nanoTime()
             while (isActive) {
                 val s = _state.value
-                engine.playClick(accent = s.accentEnabled && beat == 1, volume = s.volume)
-                _state.update { it.copy(currentBeat = beat) }
-                beat = if (beat >= s.beatsPerBar) 1 else beat + 1
+                val beatNanos = (60_000_000_000.0 / s.bpm).toLong()
+                val subNanos = beatNanos / s.subdivision
+                for (sub in 0 until s.subdivision) {
+                    val downbeat = sub == 0
+                    engine.playClick(
+                        accent = downbeat && s.accentEnabled && beat == 1,
+                        subdivision = !downbeat,
+                        volume = if (downbeat) s.volume else s.volume * SUB_VOLUME,
+                    )
+                    if (downbeat) _state.update { it.copy(currentBeat = beat) }
 
-                // NanoTime-based scheduling avoids cumulative drift.
-                nextNanos += (60_000_000_000.0 / s.bpm).toLong()
-                val waitMillis = (nextNanos - System.nanoTime()) / 1_000_000
-                if (waitMillis > 0) delay(waitMillis)
+                    // NanoTime-based scheduling avoids cumulative drift.
+                    nextNanos += subNanos
+                    val waitMillis = (nextNanos - System.nanoTime()) / 1_000_000
+                    if (waitMillis > 0) delay(waitMillis)
+                }
+                beat = if (beat >= s.beatsPerBar) 1 else beat + 1
             }
         }
     }
@@ -64,6 +73,16 @@ class MetronomeViewModel(application: Application) : AndroidViewModel(applicatio
 
     fun setBeatsPerBar(n: Int) {
         _state.update { it.copy(beatsPerBar = n.coerceIn(1, 12)) }
+        persist()
+    }
+
+    fun setSubdivision(n: Int) {
+        _state.update { it.copy(subdivision = n.coerceIn(1, 4)) }
+        persist()
+    }
+
+    fun setNoteValue(n: Int) {
+        _state.update { it.copy(noteValue = if (n == 8) 8 else 4) }
         persist()
     }
 
@@ -91,13 +110,22 @@ class MetronomeViewModel(application: Application) : AndroidViewModel(applicatio
         prefs.edit()
             .putInt(KEY_BPM, _state.value.bpm)
             .putInt(KEY_BEATS, _state.value.beatsPerBar)
+            .putInt(KEY_SUBDIVISION, _state.value.subdivision)
+            .putInt(KEY_NOTE_VALUE, _state.value.noteValue)
             .apply()
     }
 
     private fun loadState(): MetronomeState {
         val bpm = prefs.getInt(KEY_BPM, 120).coerceIn(MIN_BPM, MAX_BPM)
         val beats = prefs.getInt(KEY_BEATS, 4).coerceIn(1, 12)
-        return MetronomeState(bpm = bpm, beatsPerBar = beats)
+        val subdivision = prefs.getInt(KEY_SUBDIVISION, 1).coerceIn(1, 4)
+        val noteValue = if (prefs.getInt(KEY_NOTE_VALUE, 4) == 8) 8 else 4
+        return MetronomeState(
+            bpm = bpm,
+            beatsPerBar = beats,
+            subdivision = subdivision,
+            noteValue = noteValue,
+        )
     }
 
     override fun onCleared() {
@@ -109,7 +137,10 @@ class MetronomeViewModel(application: Application) : AndroidViewModel(applicatio
         const val PREFS_NAME = "metronome_prefs"
         const val KEY_BPM = "bpm"
         const val KEY_BEATS = "beats"
+        const val KEY_SUBDIVISION = "subdivision"
+        const val KEY_NOTE_VALUE = "noteValue"
         const val MIN_BPM = 30
         const val MAX_BPM = 300
+        const val SUB_VOLUME = 0.6f // sub-beat clicks are softer
     }
 }

@@ -25,6 +25,8 @@ class SettingsRepository(context: Context) {
     fun setFilterStrength(strength: Float) =
         update { it.copy(filterStrength = strength.coerceIn(0f, 1f)) }
 
+    fun setThemeMode(mode: ThemeMode) = update { it.copy(themeMode = mode) }
+
     /** Select an instrument and reset its tuning to the instrument's default. */
     fun setInstrument(instrumentId: String, tuningId: String) =
         update { it.copy(instrumentId = instrumentId, tuningId = tuningId) }
@@ -39,6 +41,7 @@ class SettingsRepository(context: Context) {
             .putString(KEY_ACCENT, next.accent.name)
             .putString(KEY_SENSITIVITY, next.sensitivity.name)
             .putFloat(KEY_FILTER, next.filterStrength)
+            .putString(KEY_THEME, next.themeMode.name)
             .putString(KEY_INSTRUMENT, next.instrumentId)
             .putString(KEY_TUNING, next.tuningId)
             .apply()
@@ -52,12 +55,16 @@ class SettingsRepository(context: Context) {
             Sensitivity.valueOf(prefs.getString(KEY_SENSITIVITY, null) ?: "")
         }.getOrDefault(Sensitivity.MEDIUM)
         val filter = prefs.getFloat(KEY_FILTER, 0.5f).coerceIn(0f, 1f)
+        val theme = runCatching {
+            ThemeMode.valueOf(prefs.getString(KEY_THEME, null) ?: "")
+        }.getOrDefault(ThemeMode.DARK)
         val instrument = prefs.getString(KEY_INSTRUMENT, null) ?: "guitar"
         val tuning = prefs.getString(KEY_TUNING, null) ?: "standard"
         return AppSettings(
             accent = accent,
             sensitivity = sensitivity,
             filterStrength = filter,
+            themeMode = theme,
             instrumentId = instrument,
             tuningId = tuning,
         )
@@ -68,6 +75,7 @@ class SettingsRepository(context: Context) {
         const val KEY_ACCENT = "accent"
         const val KEY_SENSITIVITY = "sensitivity"
         const val KEY_FILTER = "filterStrength"
+        const val KEY_THEME = "theme"
         const val KEY_INSTRUMENT = "instrument"
         const val KEY_TUNING = "tuning"
     }
