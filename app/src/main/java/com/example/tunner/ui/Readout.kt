@@ -54,7 +54,6 @@ fun Readout(
                 fontSize = 78.sp,
                 fontWeight = FontWeight.Bold,
                 maxLines = 1,
-                softWrap = false,
                 color = if (inTune) primary else MaterialTheme.colorScheme.onBackground,
             )
             if (noteName != null && octave != null) {

@@ -104,13 +104,9 @@ fun InstrumentScreen(
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
 
-        // Reference-tone button (always rendered so the layout stays stable;
-        // disabled until there is a reference frequency).
-        val refFreq = active?.frequency ?: state.detectedFrequency
-        TextButton(
-            onClick = { refFreq?.let { onToggleReferenceTone(it) } },
-            enabled = refFreq != null,
-        ) {
+        // Reference-tone button (always rendered + enabled; falls back to A4).
+        val refFreq = active?.frequency ?: state.detectedFrequency ?: 440.0
+        TextButton(onClick = { onToggleReferenceTone(refFreq) }) {
             Icon(
                 imageVector = if (state.isReferenceTonePlaying) Icons.Filled.Stop else Icons.Filled.PlayArrow,
                 contentDescription = if (state.isReferenceTonePlaying) "停止参考音" else "播放参考音",
