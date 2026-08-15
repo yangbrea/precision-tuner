@@ -7,7 +7,7 @@ import kotlin.math.roundToInt
 /**
  * A named pitch in 12-tone equal temperament (12-TET).
  *
- * @param name    sharp-spelling note name, e.g. "C", "C♯", "B".
+ * @param name    sharp-spelling note name, e.g. "C", "C#", "B".
  * @param octave  scientific octave number (A4 -> octave 4).
  * @param midi    MIDI note number (A4 -> 69).
  * @param frequency the exact equal-temperament frequency of this note for the given A4 reference.
@@ -18,7 +18,7 @@ data class Note(
     val midi: Int,
     val frequency: Double,
 ) {
-    /** Full name with octave, e.g. "A♯4". */
+    /** Full name with octave, e.g. "A#4". */
     val fullName: String get() = "$name$octave"
 }
 
@@ -33,7 +33,9 @@ object NoteMapper {
     const val A4_MIDI = 69
 
     val NOTE_NAMES: List<String> = listOf(
-        "C", "C♯", "D", "D♯", "E", "F", "F♯", "G", "G♯", "A", "A♯", "B"
+        // "#" is used instead of "♯" (U+266F) so the glyph never needs font
+        // fallback (Roboto lacks ♯), keeping the note text height stable.
+        "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"
     )
 
     private fun log2(x: Double): Double = log(x, 2.0)

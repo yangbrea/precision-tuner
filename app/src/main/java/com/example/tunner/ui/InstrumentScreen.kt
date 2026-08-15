@@ -84,6 +84,7 @@ fun InstrumentScreen(
         Text(
             text = active?.let { "第${it.number}弦 · ${it.fullNote}" } ?: "自动识别",
             fontSize = 16.sp,
+            maxLines = 1,
             color = TunerOnDarkMuted,
         )
 
@@ -183,12 +184,14 @@ private fun StringSelector(
                 Text(
                     text = s.number.toString(),
                     fontSize = 13.sp,
+                    maxLines = 1,
                     color = if (isActive) TunerOnDark else TunerOnDarkMuted,
                 )
                 Text(
                     text = s.noteName,
                     fontSize = 22.sp,
                     fontWeight = FontWeight.Bold,
+                    maxLines = 1,
                     color = if (isActive && inTune) primary else TunerOnDark,
                 )
             }

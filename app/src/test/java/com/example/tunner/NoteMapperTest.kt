@@ -20,7 +20,7 @@ class NoteMapperTest {
         assertEquals("B3", noteFull(246.94))
         assertEquals("E4", noteFull(329.63))
         assertEquals("A4", noteFull(440.0))
-        assertEquals("A♯4", noteFull(466.16))
+        assertEquals("A#4", noteFull(466.16))
         assertEquals("C4", noteFull(261.63))
     }
 

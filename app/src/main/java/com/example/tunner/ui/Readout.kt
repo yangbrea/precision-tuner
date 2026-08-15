@@ -54,6 +54,8 @@ fun Readout(
                 text = noteName ?: "—",
                 fontSize = 88.sp,
                 fontWeight = FontWeight.Bold,
+                maxLines = 1,
+                softWrap = false,
                 color = if (inTune) primary else MaterialTheme.colorScheme.onBackground,
             )
             if (noteName != null && octave != null) {
@@ -61,6 +63,7 @@ fun Readout(
                     text = octave.toString(),
                     fontSize = 40.sp,
                     fontWeight = FontWeight.Medium,
+                    maxLines = 1,
                     color = TunerOnDarkMuted,
                     modifier = Modifier.padding(start = 4.dp, bottom = 14.dp),
                 )
@@ -76,6 +79,7 @@ fun Readout(
             },
             fontSize = 20.sp,
             fontWeight = FontWeight.SemiBold,
+            maxLines = 1,
             color = when {
                 cents == null -> TunerOnDarkMuted
                 inTune -> primary
@@ -87,6 +91,7 @@ fun Readout(
         Text(
             text = frequency?.let { formatFrequency(it) } ?: "0.0 Hz",
             fontSize = 18.sp,
+            maxLines = 1,
             color = if (frequency != null) TunerOnDarkMuted else TunerOnDarkMuted.copy(alpha = 0.4f),
         )
     }
