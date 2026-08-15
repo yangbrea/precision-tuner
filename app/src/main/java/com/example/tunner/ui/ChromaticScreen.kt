@@ -46,7 +46,7 @@ fun ChromaticScreen(
             cents = state.cents,
             modifier = Modifier
                 .fillMaxWidth()
-                .height(210.dp),
+                .height(150.dp),
         )
 
         Spacer(Modifier.height(4.dp))
@@ -55,7 +55,7 @@ fun ChromaticScreen(
             detectedFrequency = state.detectedFrequency,
             modifier = Modifier
                 .fillMaxWidth()
-                .height(80.dp),
+                .height(56.dp),
         )
 
         Spacer(Modifier.weight(1f))

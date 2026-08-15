@@ -104,18 +104,20 @@ fun InstrumentScreen(
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
 
-        // Reference-tone (ear tuning) button for the active string / detected note.
+        // Reference-tone button (always rendered so the layout stays stable;
+        // disabled until there is a reference frequency).
         val refFreq = active?.frequency ?: state.detectedFrequency
-        if (refFreq != null) {
-            TextButton(onClick = { onToggleReferenceTone(refFreq) }) {
-                Icon(
-                    imageVector = if (state.isReferenceTonePlaying) Icons.Filled.Stop else Icons.Filled.PlayArrow,
-                    contentDescription = if (state.isReferenceTonePlaying) "停止参考音" else "播放参考音",
-                    modifier = Modifier.size(18.dp),
-                )
-                Spacer(Modifier.width(6.dp))
-                Text(if (state.isReferenceTonePlaying) "停止参考音" else "参考音")
-            }
+        TextButton(
+            onClick = { refFreq?.let { onToggleReferenceTone(it) } },
+            enabled = refFreq != null,
+        ) {
+            Icon(
+                imageVector = if (state.isReferenceTonePlaying) Icons.Filled.Stop else Icons.Filled.PlayArrow,
+                contentDescription = if (state.isReferenceTonePlaying) "停止参考音" else "播放参考音",
+                modifier = Modifier.size(18.dp),
+            )
+            Spacer(Modifier.width(6.dp))
+            Text(if (state.isReferenceTonePlaying) "停止参考音" else "参考音")
         }
 
         Spacer(Modifier.height(8.dp))
@@ -130,7 +132,7 @@ fun InstrumentScreen(
             cents = state.cents,
             modifier = Modifier
                 .fillMaxWidth()
-                .height(210.dp),
+                .height(150.dp),
         )
 
         Spacer(Modifier.height(4.dp))
@@ -139,7 +141,7 @@ fun InstrumentScreen(
             detectedFrequency = state.detectedFrequency,
             modifier = Modifier
                 .fillMaxWidth()
-                .height(80.dp),
+                .height(56.dp),
         )
 
         Spacer(Modifier.height(8.dp))

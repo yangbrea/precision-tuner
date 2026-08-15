@@ -51,7 +51,7 @@ fun Readout(
         Row(verticalAlignment = Alignment.Bottom) {
             Text(
                 text = noteName ?: "—",
-                fontSize = 88.sp,
+                fontSize = 78.sp,
                 fontWeight = FontWeight.Bold,
                 maxLines = 1,
                 softWrap = false,
@@ -60,7 +60,7 @@ fun Readout(
             if (noteName != null && octave != null) {
                 Text(
                     text = octave.toString(),
-                    fontSize = 40.sp,
+                    fontSize = 34.sp,
                     fontWeight = FontWeight.Medium,
                     maxLines = 1,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
