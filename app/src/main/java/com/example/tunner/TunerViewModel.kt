@@ -11,7 +11,7 @@ import com.example.tunner.settings.AccentColor
 import com.example.tunner.settings.AppSettings
 import com.example.tunner.settings.Sensitivity
 import com.example.tunner.settings.SettingsRepository
-import com.example.tunner.tuning.GuitarTuning
+import com.example.tunner.tuning.InstrumentCatalog
 import com.example.tunner.tuning.NoteMapper
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -61,6 +61,13 @@ class TunerViewModel(application: Application) : AndroidViewModel(application) {
     fun setMode(mode: TunerMode) {
         _state.update { it.copy(mode = mode) }
         resetDetection()
+        // Pause capture on the metronome tab (so clicks aren't picked up), and
+        // resume it when returning to a tuning tab.
+        if (mode == TunerMode.METRONOME) {
+            stopListening()
+        } else if (_state.value.hasPermission) {
+            startListening()
+        }
     }
 
     fun selectString(number: Int?) {
@@ -81,6 +88,19 @@ class TunerViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun updateFilterStrength(strength: Float) = settingsRepository.setFilterStrength(strength)
+
+    fun updateInstrument(instrumentId: String) {
+        val defaultTuning = InstrumentCatalog.instrument(instrumentId)?.defaultTuningId ?: "standard"
+        settingsRepository.setInstrument(instrumentId, defaultTuning)
+        _state.update { it.copy(selectedString = null) }
+        freqWindow.clear()
+    }
+
+    fun updateTuning(tuningId: String) {
+        settingsRepository.setTuning(tuningId)
+        _state.update { it.copy(selectedString = null) }
+        freqWindow.clear()
+    }
 
     fun startListening() {
         if (collectJob != null) return
@@ -134,7 +154,7 @@ class TunerViewModel(application: Application) : AndroidViewModel(application) {
                     cents = null,
                     confidence = 0.0,
                     spectrum = spectrum,
-                    activeString = if (it.mode == TunerMode.GUITAR) it.selectedString else null,
+                    activeString = if (it.mode == TunerMode.INSTRUMENT) it.selectedString else null,
                 ) }
             } else {
                 // Hold the last note through a brief dip; refresh spectrum only.
@@ -164,9 +184,11 @@ class TunerViewModel(application: Application) : AndroidViewModel(application) {
 
         _state.update { st ->
             val activeString = when {
-                st.mode != TunerMode.GUITAR -> null
+                st.mode != TunerMode.INSTRUMENT -> null
                 st.selectedString != null -> st.selectedString
-                else -> GuitarTuning.nearestString(note.midi)?.number
+                else -> InstrumentCatalog
+                    .tuning(s.instrumentId, s.tuningId)
+                    ?.nearestString(note.midi)?.number
             }
             st.copy(
                 detectedFrequency = medianFreq,
@@ -199,7 +221,7 @@ class TunerViewModel(application: Application) : AndroidViewModel(application) {
                 cents = null,
                 confidence = 0.0,
                 spectrum = emptyList(),
-                activeString = if (it.mode == TunerMode.GUITAR) it.selectedString else null,
+                activeString = if (it.mode == TunerMode.INSTRUMENT) it.selectedString else null,
             )
         }
     }

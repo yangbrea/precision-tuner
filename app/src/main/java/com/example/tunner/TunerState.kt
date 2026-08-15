@@ -1,7 +1,7 @@
 package com.example.tunner
 
-/** Which tuner tool is currently active. */
-enum class TunerMode { GUITAR, CHROMATIC }
+/** Which tool is currently active. */
+enum class TunerMode { INSTRUMENT, CHROMATIC, METRONOME }
 
 /**
  * Immutable UI state of the tuner.
@@ -11,7 +11,7 @@ enum class TunerMode { GUITAR, CHROMATIC }
 data class TunerState(
     val hasPermission: Boolean = false,
     val isListening: Boolean = false,
-    val mode: TunerMode = TunerMode.GUITAR,
+    val mode: TunerMode = TunerMode.INSTRUMENT,
 
     // Detected pitch (nearest 12-TET note).
     val detectedFrequency: Double? = null,
@@ -21,8 +21,8 @@ data class TunerState(
     val cents: Double? = null,
     val confidence: Double = 0.0,
 
-    // Guitar mode: manually selected string (null = auto-detect), and the
-    // currently active string number (1..6, null when unknown).
+    // Instrument mode: manually selected string (null = auto-detect), and the
+    // currently active string number (1..N, null when unknown).
     val selectedString: Int? = null,
     val activeString: Int? = null,
 

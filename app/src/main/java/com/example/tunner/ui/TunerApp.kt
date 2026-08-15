@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.AvTimer
 import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.Settings
@@ -41,13 +42,15 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.tunner.TunerMode
 import com.example.tunner.TunerState
 import com.example.tunner.TunerViewModel
+import com.example.tunner.metronome.MetronomeViewModel
 import com.example.tunner.ui.theme.TunerOnDarkMuted
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun TunerApp(viewModel: TunerViewModel) {
+fun TunerApp(viewModel: TunerViewModel, metronomeViewModel: MetronomeViewModel) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val settings by viewModel.settings.collectAsStateWithLifecycle()
+    val metronomeState by metronomeViewModel.state.collectAsStateWithLifecycle()
     val context = LocalContext.current
     var permissionRequested by rememberSaveable { mutableStateOf(false) }
     var showSettings by rememberSaveable { mutableStateOf(false) }
@@ -71,14 +74,10 @@ fun TunerApp(viewModel: TunerViewModel) {
     }
 
     DisposableEffect(Unit) {
-        onDispose { viewModel.stopListening() }
-    }
-
-    if (!state.hasPermission && permissionRequested) {
-        PermissionDenied(
-            onRequest = { permissionLauncher.launch(Manifest.permission.RECORD_AUDIO) },
-        )
-        return
+        onDispose {
+            viewModel.stopListening()
+            metronomeViewModel.stop()
+        }
     }
 
     Scaffold(
@@ -110,35 +109,40 @@ fun TunerApp(viewModel: TunerViewModel) {
             }
         },
     ) { padding ->
-        if (showSettings) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(padding),
-            ) {
-                SettingsScreen(
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding),
+        ) {
+            when {
+                showSettings -> SettingsScreen(
                     settings = settings,
                     onAccentChange = viewModel::updateAccent,
                     onSensitivityChange = viewModel::updateSensitivity,
                     onFilterChange = viewModel::updateFilterStrength,
                 )
-            }
-        } else {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(padding),
-            ) {
-                when (state.mode) {
-                    TunerMode.GUITAR -> GuitarScreen(
-                        state = state,
-                        onSelectString = viewModel::selectString,
-                    )
-                    TunerMode.CHROMATIC -> ChromaticScreen(
-                        state = state,
-                        onReferenceChange = viewModel::setReferenceA4,
-                    )
-                }
+                state.mode == TunerMode.METRONOME -> MetronomeScreen(
+                    state = metronomeState,
+                    onToggle = metronomeViewModel::toggle,
+                    onSetBpm = metronomeViewModel::setBpm,
+                    onSetBeatsPerBar = metronomeViewModel::setBeatsPerBar,
+                    onTap = metronomeViewModel::tap,
+                    onSetVolume = metronomeViewModel::setVolume,
+                )
+                !state.hasPermission && permissionRequested -> PermissionDenied(
+                    onRequest = { permissionLauncher.launch(Manifest.permission.RECORD_AUDIO) },
+                )
+                state.mode == TunerMode.INSTRUMENT -> InstrumentScreen(
+                    state = state,
+                    settings = settings,
+                    onSelectString = viewModel::selectString,
+                    onSelectInstrument = viewModel::updateInstrument,
+                    onSelectTuning = viewModel::updateTuning,
+                )
+                else -> ChromaticScreen(
+                    state = state,
+                    onReferenceChange = viewModel::setReferenceA4,
+                )
             }
         }
     }
@@ -151,16 +155,22 @@ private fun TunerBottomBar(
 ) {
     NavigationBar {
         NavigationBarItem(
-            selected = mode == TunerMode.GUITAR,
-            onClick = { onModeChange(TunerMode.GUITAR) },
+            selected = mode == TunerMode.INSTRUMENT,
+            onClick = { onModeChange(TunerMode.INSTRUMENT) },
             icon = { Icon(Icons.Filled.GraphicEq, contentDescription = null) },
-            label = { Text("吉他调音") },
+            label = { Text("乐器调音") },
         )
         NavigationBarItem(
             selected = mode == TunerMode.CHROMATIC,
             onClick = { onModeChange(TunerMode.CHROMATIC) },
             icon = { Icon(Icons.Filled.MusicNote, contentDescription = null) },
             label = { Text("半音阶调音") },
+        )
+        NavigationBarItem(
+            selected = mode == TunerMode.METRONOME,
+            onClick = { onModeChange(TunerMode.METRONOME) },
+            icon = { Icon(Icons.Filled.AvTimer, contentDescription = null) },
+            label = { Text("节拍器") },
         )
     }
 }

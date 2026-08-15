@@ -25,6 +25,12 @@ class SettingsRepository(context: Context) {
     fun setFilterStrength(strength: Float) =
         update { it.copy(filterStrength = strength.coerceIn(0f, 1f)) }
 
+    /** Select an instrument and reset its tuning to the instrument's default. */
+    fun setInstrument(instrumentId: String, tuningId: String) =
+        update { it.copy(instrumentId = instrumentId, tuningId = tuningId) }
+
+    fun setTuning(tuningId: String) = update { it.copy(tuningId = tuningId) }
+
     private fun update(transform: (AppSettings) -> AppSettings) {
         val next = transform(_settings.value)
         if (next == _settings.value) return
@@ -33,6 +39,8 @@ class SettingsRepository(context: Context) {
             .putString(KEY_ACCENT, next.accent.name)
             .putString(KEY_SENSITIVITY, next.sensitivity.name)
             .putFloat(KEY_FILTER, next.filterStrength)
+            .putString(KEY_INSTRUMENT, next.instrumentId)
+            .putString(KEY_TUNING, next.tuningId)
             .apply()
     }
 
@@ -44,7 +52,15 @@ class SettingsRepository(context: Context) {
             Sensitivity.valueOf(prefs.getString(KEY_SENSITIVITY, null) ?: "")
         }.getOrDefault(Sensitivity.MEDIUM)
         val filter = prefs.getFloat(KEY_FILTER, 0.5f).coerceIn(0f, 1f)
-        return AppSettings(accent = accent, sensitivity = sensitivity, filterStrength = filter)
+        val instrument = prefs.getString(KEY_INSTRUMENT, null) ?: "guitar"
+        val tuning = prefs.getString(KEY_TUNING, null) ?: "standard"
+        return AppSettings(
+            accent = accent,
+            sensitivity = sensitivity,
+            filterStrength = filter,
+            instrumentId = instrument,
+            tuningId = tuning,
+        )
     }
 
     private companion object {
@@ -52,5 +68,7 @@ class SettingsRepository(context: Context) {
         const val KEY_ACCENT = "accent"
         const val KEY_SENSITIVITY = "sensitivity"
         const val KEY_FILTER = "filterStrength"
+        const val KEY_INSTRUMENT = "instrument"
+        const val KEY_TUNING = "tuning"
     }
 }
