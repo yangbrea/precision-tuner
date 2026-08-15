@@ -25,6 +25,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlin.math.abs
 
 /**
  * Owns the audio capture → pitch detection → note mapping pipeline and exposes
@@ -59,6 +60,7 @@ class TunerViewModel(application: Application) : AndroidViewModel(application) {
     // displayed note is dropped (≈1.0s at 21.5 fps).
     private var missedFrames = 0
     private var frameCount = 0L
+    private var smoothingPhase: DetectionPhase? = null
 
     /** Called by the UI after the RECORD_AUDIO permission result is known. */
     fun onPermissionResult(granted: Boolean) {
@@ -210,26 +212,29 @@ class TunerViewModel(application: Application) : AndroidViewModel(application) {
             tuning?.byNumber(selectedNumber)
         } else null
 
-        val pitch = if (lockedString != null) {
-            detector.detectLocked(window, SAMPLE_RATE, lockedString.frequency)
-        } else {
-            detector.detect(window, SAMPLE_RATE)
-        }
+        // Always run the broad-band detector first. Besides finding the actual
+        // input pitch, this refreshes the FFT spectrum even in manual mode.
+        val broadPitch = detector.detect(window, SAMPLE_RATE)
         val spectrum = detector.lastSpectrum?.toList() ?: emptyList()
-        val accepted = pitch != null && pitch.confidence >= s.sensitivity.confidence
+        val broadAccepted = broadPitch != null &&
+            broadPitch.confidence >= s.sensitivity.confidence
 
-        if (!accepted) {
+        if (!broadAccepted) {
             missedFrames++
             if (missedFrames >= HOLD_FRAMES) {
                 freqWindow.clear()
+                smoothingPhase = null
                 missedFrames = 0
                 _state.update { it.copy(
                     detectedFrequency = null,
-                    noteName = null,
-                    octave = null,
-                    midi = null,
+                    noteName = lockedString?.noteName,
+                    octave = lockedString?.let { target -> target.midi / 12 - 1 },
+                    midi = lockedString?.midi,
                     cents = null,
                     confidence = 0.0,
+                    detectionPhase = DetectionPhase.WAITING,
+                    observedNoteName = null,
+                    observedOctave = null,
                     spectrum = spectrum,
                     activeString = if (it.mode == TunerMode.INSTRUMENT) it.selectedString else null,
                 ) }
@@ -237,11 +242,43 @@ class TunerViewModel(application: Application) : AndroidViewModel(application) {
                 // Hold the last note through a brief dip; refresh spectrum only.
                 _state.update { it.copy(spectrum = spectrum) }
             }
-            logFrame(pitch?.frequency, pitch?.confidence ?: 0.0, accepted = false)
+            logFrame(broadPitch?.frequency, broadPitch?.confidence ?: 0.0, accepted = false)
             return
         }
 
+        val broad = broadPitch!!
+        var phase = DetectionPhase.TRACKING
+        var pitch = broad
+        if (lockedString != null) {
+            val broadCents = lockedString.centsFrom(broad.frequency)
+            if (abs(broadCents) > MANUAL_LOCK_CENTS) {
+                phase = DetectionPhase.OUT_OF_RANGE
+            } else {
+                // Close to the selected target, use the narrow YIN search for
+                // stable fine tuning. Fall back to the valid broad estimate.
+                val refined = detector.detectLocked(window, SAMPLE_RATE, lockedString.frequency)
+                if (refined != null && refined.confidence >= s.sensitivity.confidence) {
+                    pitch = refined
+                }
+            }
+        }
+
         missedFrames = 0
+        if (smoothingPhase != phase) {
+            freqWindow.clear()
+            if (smoothingPhase != null) {
+                _state.update { it.copy(
+                    detectedFrequency = null,
+                    cents = null,
+                    confidence = 0.0,
+                    detectionPhase = DetectionPhase.WAITING,
+                    observedNoteName = null,
+                    observedOctave = null,
+                    spectrum = spectrum,
+                ) }
+            }
+            smoothingPhase = phase
+        }
         freqWindow.addLast(pitch.frequency)
         val windowSize = s.sensitivity.windowSize
         if (freqWindow.size > windowSize) freqWindow.removeFirst()
@@ -253,6 +290,7 @@ class TunerViewModel(application: Application) : AndroidViewModel(application) {
         val sorted = freqWindow.sorted()
         val medianFreq = sorted[sorted.size / 2]
         val a4 = _state.value.referenceA4
+        val observedNote = NoteMapper.noteFromFrequency(medianFreq, a4)
 
         // Instrument mode always reports deviation from a target in the active
         // tuning. Chromatic mode continues to use the nearest 12-TET note.
@@ -291,6 +329,9 @@ class TunerViewModel(application: Application) : AndroidViewModel(application) {
                 midi = midi,
                 cents = cents,
                 confidence = pitch.confidence,
+                detectionPhase = phase,
+                observedNoteName = if (phase == DetectionPhase.OUT_OF_RANGE) observedNote.name else null,
+                observedOctave = if (phase == DetectionPhase.OUT_OF_RANGE) observedNote.octave else null,
                 spectrum = spectrum,
                 activeString = activeString,
             )
@@ -305,15 +346,27 @@ class TunerViewModel(application: Application) : AndroidViewModel(application) {
 
     private fun resetDetection() {
         freqWindow.clear()
+        smoothingPhase = null
         missedFrames = 0
+        val currentState = _state.value
+        val currentSettings = settings.value
+        val manualTarget = if (
+            currentState.mode == TunerMode.INSTRUMENT && currentState.selectedString != null
+        ) {
+            resolveTuning(currentSettings.instrumentId, currentSettings.tuningId)
+                ?.byNumber(currentState.selectedString)
+        } else null
         _state.update {
             it.copy(
                 detectedFrequency = null,
-                noteName = null,
-                octave = null,
-                midi = null,
+                noteName = manualTarget?.noteName,
+                octave = manualTarget?.let { target -> target.midi / 12 - 1 },
+                midi = manualTarget?.midi,
                 cents = null,
                 confidence = 0.0,
+                detectionPhase = DetectionPhase.WAITING,
+                observedNoteName = null,
+                observedOctave = null,
                 spectrum = emptyList(),
                 activeString = if (it.mode == TunerMode.INSTRUMENT) it.selectedString else null,
             )
@@ -331,6 +384,7 @@ class TunerViewModel(application: Application) : AndroidViewModel(application) {
         const val FRAME_SIZE = 4096   // ~93 ms window
         const val HOP = 2048          // ~46 ms update interval (50% overlap)
         const val HOLD_FRAMES = 22    // ≈1.0s hold before dropping the note
+        const val MANUAL_LOCK_CENTS = 100.0
         const val LOG_EVERY = 10L     // throttle debug logging
     }
 }

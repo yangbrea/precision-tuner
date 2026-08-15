@@ -40,6 +40,9 @@ fun ChromaticScreen(
             octave = state.octave,
             cents = state.cents,
             frequency = state.detectedFrequency,
+            detectionPhase = state.detectionPhase,
+            observedNoteName = state.observedNoteName,
+            observedOctave = state.observedOctave,
         )
 
         TunerGauge(

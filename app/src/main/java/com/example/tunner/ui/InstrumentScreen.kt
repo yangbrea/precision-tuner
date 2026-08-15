@@ -124,13 +124,16 @@ fun InstrumentScreen(
             octave = state.octave,
             cents = state.cents,
             frequency = state.detectedFrequency,
+            detectionPhase = state.detectionPhase,
+            observedNoteName = state.observedNoteName,
+            observedOctave = state.observedOctave,
         )
 
         TunerGauge(
             cents = state.cents,
             modifier = Modifier
                 .fillMaxWidth()
-                .height(150.dp),
+                .height(135.dp),
         )
 
         Spacer(Modifier.height(4.dp))
@@ -139,7 +142,7 @@ fun InstrumentScreen(
             detectedFrequency = state.detectedFrequency,
             modifier = Modifier
                 .fillMaxWidth()
-                .height(56.dp),
+                .height(48.dp),
         )
 
         Spacer(Modifier.height(8.dp))

@@ -15,6 +15,7 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.tunner.TunerState
+import com.example.tunner.DetectionPhase
 import com.example.tunner.ui.theme.TunerFlat
 import com.example.tunner.ui.theme.TunerSharp
 import kotlin.math.abs
@@ -43,9 +44,13 @@ fun Readout(
     octave: Int?,
     cents: Double?,
     frequency: Double?,
+    detectionPhase: DetectionPhase,
+    observedNoteName: String?,
+    observedOctave: Int?,
     modifier: Modifier = Modifier,
 ) {
-    val inTune = cents != null && abs(cents) <= TunerState.IN_TUNE_CENTS
+    val inTune = detectionPhase == DetectionPhase.TRACKING &&
+        cents != null && abs(cents) <= TunerState.IN_TUNE_CENTS
     val primary = MaterialTheme.colorScheme.primary
     Column(
         modifier = modifier,
@@ -80,7 +85,16 @@ fun Readout(
 
         Text(
             text = when {
-                cents == null -> "等待输入…"
+                detectionPhase == DetectionPhase.WAITING || cents == null -> "等待输入…"
+                detectionPhase == DetectionPhase.OUT_OF_RANGE -> {
+                    val observed = if (observedNoteName != null && observedOctave != null) {
+                        "$observedNoteName$observedOctave"
+                    } else {
+                        "其他音高"
+                    }
+                    if (cents < 0) "检测到 $observed · 远低于目标"
+                    else "检测到 $observed · 远高于目标"
+                }
                 inTune -> "已调准"
                 cents < 0 -> "偏低 ${formatCents(cents)}"
                 else -> "偏高 ${formatCents(cents)}"
@@ -89,7 +103,7 @@ fun Readout(
             fontWeight = FontWeight.SemiBold,
             maxLines = 1,
             color = when {
-                cents == null -> MaterialTheme.colorScheme.onSurfaceVariant
+                detectionPhase == DetectionPhase.WAITING || cents == null -> MaterialTheme.colorScheme.onSurfaceVariant
                 inTune -> primary
                 cents < 0 -> TunerFlat
                 else -> TunerSharp

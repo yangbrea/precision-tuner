@@ -3,6 +3,9 @@ package com.example.tunner
 /** Which tool is currently active. */
 enum class TunerMode { INSTRUMENT, CHROMATIC, METRONOME }
 
+/** How the current signal relates to the active tuning target. */
+enum class DetectionPhase { WAITING, TRACKING, OUT_OF_RANGE }
+
 /**
  * Immutable UI state of the tuner.
  *
@@ -13,13 +16,20 @@ data class TunerState(
     val isListening: Boolean = false,
     val mode: TunerMode = TunerMode.INSTRUMENT,
 
-    // Detected pitch (nearest 12-TET note).
+    // Primary readout. In manual mode this is the selected target; otherwise it
+    // is the detected/nearest tuning note.
     val detectedFrequency: Double? = null,
     val noteName: String? = null,
     val octave: Int? = null,
     val midi: Int? = null,
     val cents: Double? = null,
     val confidence: Double = 0.0,
+    val detectionPhase: DetectionPhase = DetectionPhase.WAITING,
+
+    // Actual broad-band observation. In manual mode the main note fields stay
+    // fixed on the selected target while these fields describe a wrong string.
+    val observedNoteName: String? = null,
+    val observedOctave: Int? = null,
 
     // Instrument mode: manually selected string (null = auto-detect), and the
     // currently active string number (1..N, null when unknown).
@@ -37,7 +47,8 @@ data class TunerState(
 ) {
     /** True when the detected pitch is within a small window of the target. */
     val isInTune: Boolean
-        get() = cents != null && kotlin.math.abs(cents) <= IN_TUNE_CENTS
+        get() = detectionPhase == DetectionPhase.TRACKING &&
+            cents != null && kotlin.math.abs(cents) <= IN_TUNE_CENTS
 
     companion object {
         const val IN_TUNE_CENTS = 5.0
