@@ -14,7 +14,11 @@ object Spectrum {
 
     /**
      * Collapse a half-FFT magnitude spectrum ([magnitude], one entry per bin)
-     * into [BANDS] display bands using max-pooling, then normalize to [0, 1].
+     * into [BANDS] display bands using power (magnitude²) max-pooling, then
+     * normalize to [0, 1].
+     *
+     * Squaring emphasizes the dominant peaks and visually de-emphasizes weaker
+     * partials (a harmonic at half the magnitude shows at 1/4 the height).
      *
      * @param fftSize   the full FFT length (2 × [magnitude].size).
      */
@@ -25,8 +29,8 @@ object Spectrum {
         for (b in 1 until maxBin) {
             val freq = b * binHz
             val idx = (freq / MAX_HZ * BANDS).toInt().coerceIn(0, BANDS - 1)
-            val v = magnitude[b].toFloat()
-            if (v > bands[idx]) bands[idx] = v
+            val power = (magnitude[b] * magnitude[b]).toFloat()
+            if (power > bands[idx]) bands[idx] = power
         }
         val peak = bands.maxOrNull() ?: 0f
         if (peak > 0f) {
