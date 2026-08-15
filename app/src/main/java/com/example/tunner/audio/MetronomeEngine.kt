@@ -22,6 +22,7 @@ class MetronomeEngine {
     fun start() {
         if (track != null) return
         val minBuf = AudioTrack.getMinBufferSize(SAMPLE_RATE, CHANNEL, ENCODING)
+        val bufBytes = minBuf.coerceAtLeast(8192)
         val t = AudioTrack.Builder()
             .setAudioAttributes(
                 AudioAttributes.Builder()
@@ -36,9 +37,14 @@ class MetronomeEngine {
                     .setChannelMask(CHANNEL)
                     .build()
             )
-            .setBufferSizeInBytes(minBuf.coerceAtLeast(8192))
+            .setBufferSizeInBytes(bufBytes)
             .setTransferMode(AudioTrack.MODE_STREAM)
             .build()
+        // Prime the audio path: fill the buffer with silence BEFORE starting so
+        // playback begins immediately, instead of buffering the first clicks and
+        // then playing them in a burst once the HAL starts consuming.
+        val silenceSamples = bufBytes / 2
+        t.write(ShortArray(silenceSamples), 0, silenceSamples)
         t.play()
         track = t
     }

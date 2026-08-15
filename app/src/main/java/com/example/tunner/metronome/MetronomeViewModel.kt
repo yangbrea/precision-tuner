@@ -5,6 +5,7 @@ import android.content.Context
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.tunner.audio.MetronomeEngine
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -32,7 +33,7 @@ class MetronomeViewModel(application: Application) : AndroidViewModel(applicatio
     fun start() {
         if (playJob != null) return
         _state.update { it.copy(isPlaying = true, currentBeat = 0) }
-        playJob = viewModelScope.launch {
+        playJob = viewModelScope.launch(Dispatchers.Default) {
             engine.start()
             var beat = 1
             var nextNanos = System.nanoTime()
