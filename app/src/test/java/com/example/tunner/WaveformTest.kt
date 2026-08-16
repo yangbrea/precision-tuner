@@ -18,17 +18,19 @@ class WaveformTest {
     }
 
     @Test
-    fun loudSignalScaledToTarget() {
-        val w = downsampleWaveform(constantBuffer(0.9f), 256)
+    fun fixedGainScalesQuietSignal() {
+        // 0.05 * 6 = 0.3
+        val w = downsampleWaveform(constantBuffer(0.05f), 256)
         val peak = w.maxOf { abs(it) }
-        assertTrue("peak=$peak should be ~0.9", peak in 0.8f..1.0f)
+        assertTrue("peak=$peak should be ~0.3", peak in 0.25f..0.35f)
     }
 
     @Test
-    fun quietSignalAmplified() {
-        val w = downsampleWaveform(constantBuffer(0.05f), 256)
-        val peak = w.maxOf { abs(it) }
-        assertTrue("peak=$peak should be amplified to ~0.9", peak in 0.8f..1.0f)
+    fun fixedGainClipsToUnity() {
+        // 0.9 * 6 = 5.4 -> clamped to 1.0
+        val w = downsampleWaveform(constantBuffer(0.9f), 256)
+        assertTrue(w.all { it in -1f..1f })
+        assertTrue(w.maxOf { abs(it) } <= 1f)
     }
 
     @Test
