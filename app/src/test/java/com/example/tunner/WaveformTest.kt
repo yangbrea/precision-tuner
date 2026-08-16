@@ -18,16 +18,16 @@ class WaveformTest {
     }
 
     @Test
-    fun fixedGainScalesQuietSignal() {
-        // 0.05 * 6 = 0.3
-        val w = downsampleWaveform(constantBuffer(0.05f), 256)
+    fun fixedGainScalesSignal() {
+        // 0.01 * 24 = 0.24
+        val w = downsampleWaveform(constantBuffer(0.01f), 256)
         val peak = w.maxOf { abs(it) }
-        assertTrue("peak=$peak should be ~0.3", peak in 0.25f..0.35f)
+        assertTrue("peak=$peak should be ~0.24", peak in 0.20f..0.28f)
     }
 
     @Test
     fun fixedGainClipsToUnity() {
-        // 0.9 * 6 = 5.4 -> clamped to 1.0
+        // 0.9 * 24 = 21.6 -> clamped to 1.0
         val w = downsampleWaveform(constantBuffer(0.9f), 256)
         assertTrue(w.all { it in -1f..1f })
         assertTrue(w.maxOf { abs(it) } <= 1f)

@@ -20,4 +20,4 @@ fun downsampleWaveform(
     }
 }
 
-private const val FIXED_GAIN = 6.0f
+private const val FIXED_GAIN = 24.0f
