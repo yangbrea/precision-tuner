@@ -1,5 +1,7 @@
 package com.example.tunner.ui
 
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.heightIn
@@ -7,8 +9,14 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.PlatformTextStyle
 import androidx.compose.ui.text.TextStyle
@@ -18,6 +26,7 @@ import com.example.tunner.TunerState
 import com.example.tunner.DetectionPhase
 import com.example.tunner.ui.theme.TunerFlat
 import com.example.tunner.ui.theme.TunerSharp
+import kotlinx.coroutines.delay
 import kotlin.math.abs
 import kotlin.math.roundToInt
 
@@ -47,11 +56,28 @@ fun Readout(
     detectionPhase: DetectionPhase,
     observedNoteName: String?,
     observedOctave: Int?,
+    flashTick: Int = 0,
     modifier: Modifier = Modifier,
 ) {
     val inTune = detectionPhase == DetectionPhase.TRACKING &&
         cents != null && abs(cents) <= TunerState.IN_TUNE_CENTS
     val primary = MaterialTheme.colorScheme.primary
+
+    // One-shot "locked" pulse: scale the note briefly on each in-tune flash.
+    var pulse by remember { mutableStateOf(false) }
+    LaunchedEffect(flashTick) {
+        if (flashTick > 0) {
+            pulse = true
+            delay(130)
+            pulse = false
+        }
+    }
+    val flashScale by animateFloatAsState(
+        targetValue = if (pulse) 1.14f else 1f,
+        animationSpec = tween(durationMillis = 90),
+        label = "noteFlash",
+    )
+
     Column(
         modifier = modifier,
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -69,6 +95,10 @@ fun Readout(
                     platformStyle = PlatformTextStyle(includeFontPadding = true),
                 ),
                 maxLines = 1,
+                modifier = Modifier.graphicsLayer {
+                    scaleX = flashScale
+                    scaleY = flashScale
+                },
                 color = if (inTune) primary else MaterialTheme.colorScheme.onBackground,
             )
             if (noteName != null && octave != null) {

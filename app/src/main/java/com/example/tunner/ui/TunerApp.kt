@@ -122,6 +122,7 @@ fun TunerApp(viewModel: TunerViewModel, metronomeViewModel: MetronomeViewModel) 
                     onSensitivityChange = viewModel::updateSensitivity,
                     onFilterChange = viewModel::updateFilterStrength,
                     onThemeModeChange = viewModel::updateThemeMode,
+                    onVisualModeChange = viewModel::updateVisualMode,
                 )
                 state.mode == TunerMode.METRONOME -> MetronomeScreen(
                     state = metronomeState,
@@ -151,6 +152,7 @@ fun TunerApp(viewModel: TunerViewModel, metronomeViewModel: MetronomeViewModel) 
                 )
                 else -> ChromaticScreen(
                     state = state,
+                    settings = settings,
                     onReferenceChange = viewModel::setReferenceA4,
                 )
             }

@@ -27,6 +27,8 @@ class SettingsRepository(context: Context) {
 
     fun setThemeMode(mode: ThemeMode) = update { it.copy(themeMode = mode) }
 
+    fun setVisualMode(mode: VisualMode) = update { it.copy(visualMode = mode) }
+
     /** Select an instrument and reset its tuning to the instrument's default. */
     fun setInstrument(instrumentId: String, tuningId: String) =
         update { it.copy(instrumentId = instrumentId, tuningId = tuningId) }
@@ -42,6 +44,7 @@ class SettingsRepository(context: Context) {
             .putString(KEY_SENSITIVITY, next.sensitivity.name)
             .putFloat(KEY_FILTER, next.filterStrength)
             .putString(KEY_THEME, next.themeMode.name)
+            .putString(KEY_VISUAL, next.visualMode.name)
             .putString(KEY_INSTRUMENT, next.instrumentId)
             .putString(KEY_TUNING, next.tuningId)
             .apply()
@@ -58,6 +61,9 @@ class SettingsRepository(context: Context) {
         val theme = runCatching {
             ThemeMode.valueOf(prefs.getString(KEY_THEME, null) ?: "")
         }.getOrDefault(ThemeMode.DARK)
+        val visual = runCatching {
+            VisualMode.valueOf(prefs.getString(KEY_VISUAL, null) ?: "")
+        }.getOrDefault(VisualMode.SPECTRUM)
         val instrument = prefs.getString(KEY_INSTRUMENT, null) ?: "guitar"
         val tuning = prefs.getString(KEY_TUNING, null) ?: "standard"
         return AppSettings(
@@ -65,6 +71,7 @@ class SettingsRepository(context: Context) {
             sensitivity = sensitivity,
             filterStrength = filter,
             themeMode = theme,
+            visualMode = visual,
             instrumentId = instrument,
             tuningId = tuning,
         )
@@ -76,6 +83,7 @@ class SettingsRepository(context: Context) {
         const val KEY_SENSITIVITY = "sensitivity"
         const val KEY_FILTER = "filterStrength"
         const val KEY_THEME = "theme"
+        const val KEY_VISUAL = "visual"
         const val KEY_INSTRUMENT = "instrument"
         const val KEY_TUNING = "tuning"
     }

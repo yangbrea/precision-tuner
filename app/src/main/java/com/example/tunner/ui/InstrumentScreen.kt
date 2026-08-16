@@ -46,6 +46,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.tunner.TunerState
 import com.example.tunner.settings.AppSettings
+import com.example.tunner.settings.VisualMode
 import com.example.tunner.tuning.CustomTuningStore
 import com.example.tunner.tuning.Instrument
 import com.example.tunner.tuning.InstrumentCatalog
@@ -127,6 +128,7 @@ fun InstrumentScreen(
             detectionPhase = state.detectionPhase,
             observedNoteName = state.observedNoteName,
             observedOctave = state.observedOctave,
+            flashTick = state.inTuneFlash,
         )
 
         TunerGauge(
@@ -137,13 +139,22 @@ fun InstrumentScreen(
         )
 
         Spacer(Modifier.height(4.dp))
-        SpectrumView(
-            spectrum = state.spectrum,
-            detectedFrequency = state.detectedFrequency,
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(48.dp),
-        )
+        if (settings.visualMode == VisualMode.WAVEFORM) {
+            WaveformView(
+                waveform = state.waveform,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(48.dp),
+            )
+        } else {
+            SpectrumView(
+                spectrum = state.spectrum,
+                detectedFrequency = state.detectedFrequency,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(48.dp),
+            )
+        }
 
         Spacer(Modifier.height(8.dp))
         if (tuning != null) {

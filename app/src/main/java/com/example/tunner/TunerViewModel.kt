@@ -5,14 +5,17 @@ import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.tunner.audio.AudioInput
+import com.example.tunner.audio.CueSoundPlayer
 import com.example.tunner.audio.LowPassFilter
 import com.example.tunner.audio.ReferenceToneEngine
+import com.example.tunner.audio.downsampleWaveform
 import com.example.tunner.pitch.HybridPitchDetector
 import com.example.tunner.settings.AccentColor
 import com.example.tunner.settings.AppSettings
 import com.example.tunner.settings.Sensitivity
 import com.example.tunner.settings.SettingsRepository
 import com.example.tunner.settings.ThemeMode
+import com.example.tunner.settings.VisualMode
 import com.example.tunner.tuning.CustomTuningStore
 import com.example.tunner.tuning.InstrumentCatalog
 import com.example.tunner.tuning.NoteMapper
@@ -46,6 +49,7 @@ class TunerViewModel(application: Application) : AndroidViewModel(application) {
     private val filter = LowPassFilter()
     private val audioInput = AudioInput(SAMPLE_RATE)
     private val referenceTone = ReferenceToneEngine()
+    private val cueSound = CueSoundPlayer()
     private var collectJob: Job? = null
 
     // Rolling window of recent valid frequencies for median smoothing.
@@ -102,6 +106,8 @@ class TunerViewModel(application: Application) : AndroidViewModel(application) {
     fun updateFilterStrength(strength: Float) = settingsRepository.setFilterStrength(strength)
 
     fun updateThemeMode(mode: ThemeMode) = settingsRepository.setThemeMode(mode)
+
+    fun updateVisualMode(mode: VisualMode) = settingsRepository.setVisualMode(mode)
 
     fun updateInstrument(instrumentId: String) {
         stopReferenceTone()
@@ -165,6 +171,12 @@ class TunerViewModel(application: Application) : AndroidViewModel(application) {
         _state.update { it.copy(isReferenceTonePlaying = false) }
     }
 
+    private fun playInTuneCue() {
+        viewModelScope.launch(Dispatchers.Default) {
+            cueSound.play()
+        }
+    }
+
     fun startListening() {
         if (collectJob != null) return
         _state.update { it.copy(isListening = true) }
@@ -203,6 +215,7 @@ class TunerViewModel(application: Application) : AndroidViewModel(application) {
         val s = settings.value
         val mode = _state.value.mode
         val tuning = resolveTuning(s.instrumentId, s.tuningId)
+        val waveform = downsampleWaveform(window)
 
         // String lock: when a string is manually selected, constrain detection
         // to that string's pitch (±~100 cents) for robustness against harmonics
@@ -235,12 +248,12 @@ class TunerViewModel(application: Application) : AndroidViewModel(application) {
                     detectionPhase = DetectionPhase.WAITING,
                     observedNoteName = null,
                     observedOctave = null,
-                    spectrum = spectrum,
+                    spectrum = spectrum, waveform = waveform,
                     activeString = if (it.mode == TunerMode.INSTRUMENT) it.selectedString else null,
                 ) }
             } else {
                 // Hold the last note through a brief dip; refresh spectrum only.
-                _state.update { it.copy(spectrum = spectrum) }
+                _state.update { it.copy(spectrum = spectrum, waveform = waveform) }
             }
             logFrame(broadPitch?.frequency, broadPitch?.confidence ?: 0.0, accepted = false)
             return
@@ -274,7 +287,7 @@ class TunerViewModel(application: Application) : AndroidViewModel(application) {
                     detectionPhase = DetectionPhase.WAITING,
                     observedNoteName = null,
                     observedOctave = null,
-                    spectrum = spectrum,
+                    spectrum = spectrum, waveform = waveform,
                 ) }
             }
             smoothingPhase = phase
@@ -283,7 +296,7 @@ class TunerViewModel(application: Application) : AndroidViewModel(application) {
         val windowSize = s.sensitivity.windowSize
         if (freqWindow.size > windowSize) freqWindow.removeFirst()
         if (freqWindow.size < windowSize) {
-            _state.update { it.copy(spectrum = spectrum) }
+            _state.update { it.copy(spectrum = spectrum, waveform = waveform) }
             return
         }
 
@@ -316,6 +329,13 @@ class TunerViewModel(application: Application) : AndroidViewModel(application) {
 
         logFrame(pitch.frequency, pitch.confidence, accepted = true)
 
+        // Detect the "not in tune -> in tune" rising edge and fire the cue.
+        val nowInTune = phase == DetectionPhase.TRACKING &&
+            abs(cents) <= TunerState.IN_TUNE_CENTS
+        val wasInTune = _state.value.isInTune
+        val flashTick = _state.value.inTuneFlash + if (nowInTune && !wasInTune) 1 else 0
+        if (nowInTune && !wasInTune) playInTuneCue()
+
         _state.update { st ->
             val activeString = when {
                 st.mode != TunerMode.INSTRUMENT -> null
@@ -332,8 +352,9 @@ class TunerViewModel(application: Application) : AndroidViewModel(application) {
                 detectionPhase = phase,
                 observedNoteName = if (phase == DetectionPhase.OUT_OF_RANGE) observedNote.name else null,
                 observedOctave = if (phase == DetectionPhase.OUT_OF_RANGE) observedNote.octave else null,
-                spectrum = spectrum,
+                spectrum = spectrum, waveform = waveform,
                 activeString = activeString,
+                inTuneFlash = flashTick,
             )
         }
     }

@@ -5,12 +5,16 @@ import androidx.compose.ui.graphics.Color
 /** Dark vs light app theme. */
 enum class ThemeMode { DARK, LIGHT }
 
+/** Which visualization is shown in the tuner screens. */
+enum class VisualMode { SPECTRUM, WAVEFORM }
+
 /** User-configurable app settings. */
 data class AppSettings(
     val accent: AccentColor = AccentColor.GREEN,
     val sensitivity: Sensitivity = Sensitivity.MEDIUM,
     val filterStrength: Float = 0.5f, // 0..1, 0 = off
     val themeMode: ThemeMode = ThemeMode.DARK,
+    val visualMode: VisualMode = VisualMode.SPECTRUM,
 
     // Selected instrument & tuning for the instrument tuner.
     val instrumentId: String = "guitar",

@@ -42,8 +42,15 @@ data class TunerState(
     // Normalized magnitude spectrum (display bands), for visualization.
     val spectrum: List<Float> = emptyList(),
 
+    // Downsampled time-domain waveform (normalized -1..1), for visualization.
+    val waveform: List<Float> = emptyList(),
+
     // Reference tone playback state (ear tuning).
     val isReferenceTonePlaying: Boolean = false,
+
+    // Increments on each "not in tune -> in tune" rising edge; drives the
+    // one-shot "locked" flash animation.
+    val inTuneFlash: Int = 0,
 ) {
     /** True when the detected pitch is within a small window of the target. */
     val isInTune: Boolean

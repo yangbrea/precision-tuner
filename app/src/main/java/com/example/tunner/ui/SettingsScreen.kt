@@ -34,6 +34,7 @@ import com.example.tunner.settings.AccentColor
 import com.example.tunner.settings.AppSettings
 import com.example.tunner.settings.Sensitivity
 import com.example.tunner.settings.ThemeMode
+import com.example.tunner.settings.VisualMode
 import kotlin.math.roundToInt
 
 @Composable
@@ -43,6 +44,7 @@ fun SettingsScreen(
     onSensitivityChange: (Sensitivity) -> Unit,
     onFilterChange: (Float) -> Unit,
     onThemeModeChange: (ThemeMode) -> Unit,
+    onVisualModeChange: (VisualMode) -> Unit,
 ) {
     Column(
         modifier = Modifier
@@ -56,6 +58,10 @@ fun SettingsScreen(
         Spacer(Modifier.height(28.dp))
         SectionTitle("主题色")
         AccentRow(selected = settings.accent, onSelect = onAccentChange)
+
+        Spacer(Modifier.height(28.dp))
+        SectionTitle("可视化")
+        VisualModeRow(selected = settings.visualMode, onSelect = onVisualModeChange)
 
         Spacer(Modifier.height(28.dp))
         SectionTitle("响应灵敏度")
@@ -110,6 +116,39 @@ private fun ThemeModeRow(selected: ThemeMode, onSelect: (ThemeMode) -> Unit) {
             ) {
                 Text(
                     text = if (mode == ThemeMode.DARK) "深色" else "浅色",
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = if (isSelected) accent else MaterialTheme.colorScheme.onBackground,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun VisualModeRow(selected: VisualMode, onSelect: (VisualMode) -> Unit) {
+    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        VisualMode.entries.forEach { mode ->
+            val isSelected = mode == selected
+            val accent = MaterialTheme.colorScheme.primary
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .background(
+                        if (isSelected) accent.copy(alpha = 0.2f) else MaterialTheme.colorScheme.surfaceVariant,
+                        RoundedCornerShape(12.dp),
+                    )
+                    .border(
+                        width = 1.5.dp,
+                        color = if (isSelected) accent else MaterialTheme.colorScheme.outlineVariant,
+                        shape = RoundedCornerShape(12.dp),
+                    )
+                    .clickable { onSelect(mode) }
+                    .padding(vertical = 12.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    text = if (mode == VisualMode.SPECTRUM) "频谱" else "波形",
                     fontSize = 15.sp,
                     fontWeight = FontWeight.Bold,
                     color = if (isSelected) accent else MaterialTheme.colorScheme.onBackground,

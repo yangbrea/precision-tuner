@@ -15,11 +15,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.tunner.TunerState
+import com.example.tunner.settings.AppSettings
+import com.example.tunner.settings.VisualMode
 import kotlin.math.roundToInt
 
 @Composable
 fun ChromaticScreen(
     state: TunerState,
+    settings: AppSettings,
     onReferenceChange: (Double) -> Unit,
 ) {
     Column(
@@ -43,6 +46,7 @@ fun ChromaticScreen(
             detectionPhase = state.detectionPhase,
             observedNoteName = state.observedNoteName,
             observedOctave = state.observedOctave,
+            flashTick = state.inTuneFlash,
         )
 
         TunerGauge(
@@ -53,13 +57,22 @@ fun ChromaticScreen(
         )
 
         Spacer(Modifier.height(4.dp))
-        SpectrumView(
-            spectrum = state.spectrum,
-            detectedFrequency = state.detectedFrequency,
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(56.dp),
-        )
+        if (settings.visualMode == VisualMode.WAVEFORM) {
+            WaveformView(
+                waveform = state.waveform,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(56.dp),
+            )
+        } else {
+            SpectrumView(
+                spectrum = state.spectrum,
+                detectedFrequency = state.detectedFrequency,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(56.dp),
+            )
+        }
 
         Spacer(Modifier.weight(1f))
 
