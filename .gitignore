@@ -18,3 +18,4 @@
 __pycache__/
 *.pyc
 /app/src/fullCrepe/
+.git.backup-*/
