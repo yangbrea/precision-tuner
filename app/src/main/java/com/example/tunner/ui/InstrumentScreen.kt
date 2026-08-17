@@ -127,9 +127,10 @@ fun InstrumentScreen(
 
         TunerGauge(
             cents = state.cents,
+            flashTick = state.inTuneFlash,
             modifier = Modifier
                 .fillMaxWidth()
-                .height(135.dp),
+                .height(108.dp),
         )
 
         Spacer(Modifier.height(4.dp))

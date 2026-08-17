@@ -51,9 +51,10 @@ fun ChromaticScreen(
 
         TunerGauge(
             cents = state.cents,
+            flashTick = state.inTuneFlash,
             modifier = Modifier
                 .fillMaxWidth()
-                .height(150.dp),
+                .height(112.dp),
         )
 
         Spacer(Modifier.height(4.dp))
