@@ -2,7 +2,6 @@ package com.example.tunner.pitch
 
 import kotlin.math.max
 import kotlin.math.min
-import kotlin.math.roundToInt
 import kotlin.math.sqrt
 
 /**
@@ -34,16 +33,28 @@ class HybridPitchDetector(
             return null
         }
 
-        val (coarse, spectrum) = coarseFundamental(buffer, sampleRate, n)
+        val (candidates, spectrum) = coarseCandidates(buffer, sampleRate, n)
         lastSpectrum = spectrum
 
-        // Refine with YIN, guided by the coarse estimate. If the guided search
-        // is missing or only marginal, fall back to the full-range YIN (which
-        // has its own silence/noise gates) rather than giving up or returning a
-        // weak result.
-        val guided = coarse?.let { yin.detectGuided(buffer, sampleRate, it) }
-        if (guided != null && guided.confidence >= GUIDED_CONFIDENCE_FLOOR) {
-            return guided
+        // Evaluate the dominant FFT peak and its possible 1/2 and 1/3
+        // fundamentals independently. YIN periodicity is the primary score;
+        // spectral prominence is only supporting evidence. Among effectively
+        // tied periodic candidates, prefer the shortest real period (highest
+        // frequency), preventing a second YIN minimum from causing a low-octave
+        // result.
+        val evaluated = candidates.mapNotNull { candidate ->
+            yin.detectGuided(buffer, sampleRate, candidate.frequency, CANDIDATE_SEARCH_FRACTION)
+                ?.let { pitch ->
+                    val confidence = (pitch.confidence * 0.88 + candidate.spectralQuality * 0.12)
+                        .coerceIn(0.0, 1.0)
+                    Pitch(pitch.frequency, confidence)
+                }
+        }
+        val bestConfidence = evaluated.maxOfOrNull { it.confidence }
+        if (bestConfidence != null && bestConfidence >= GUIDED_CONFIDENCE_FLOOR) {
+            return evaluated
+                .filter { it.confidence >= bestConfidence - CANDIDATE_TIE_MARGIN }
+                .maxByOrNull { it.frequency }
         }
         return yin.detect(buffer, sampleRate)
     }
@@ -52,11 +63,13 @@ class HybridPitchDetector(
     fun detectLocked(buffer: ShortArray, sampleRate: Int, targetFrequency: Double): Pitch? =
         yin.detectLocked(buffer, sampleRate, targetFrequency)
 
-    private fun coarseFundamental(
+    private data class CoarseCandidate(val frequency: Double, val spectralQuality: Double)
+
+    private fun coarseCandidates(
         buffer: ShortArray,
         sampleRate: Int,
         n: Int,
-    ): Pair<Double?, FloatArray> {
+    ): Pair<List<CoarseCandidate>, FloatArray> {
         val re = DoubleArray(n)
         val im = DoubleArray(n)
         val win = hann(n)
@@ -72,7 +85,7 @@ class HybridPitchDetector(
         val binHz = sampleRate.toDouble() / n
         val binMin = max(1, (MIN_COARSE_HZ / binHz).toInt())
         val binMax = min(half - 2, (MAX_COARSE_HZ / binHz).toInt())
-        if (binMin > binMax) return null to spectrum
+        if (binMin > binMax) return emptyList<CoarseCandidate>() to spectrum
 
         var peakBin = binMin
         var peakVal = mag[binMin]
@@ -82,31 +95,29 @@ class HybridPitchDetector(
                 peakBin = b
             }
         }
-        if (peakVal < PEAK_FLOOR) return null to spectrum
+        if (peakVal < PEAK_FLOOR) return emptyList<CoarseCandidate>() to spectrum
 
         val peakFreq = interpolatePeakLog(mag, peakBin) * binHz
-
-        // Octave disambiguation: descend to the lowest sub-harmonic (of the
-        // peak) that still has significant energy, to land on the fundamental.
-        var divisor = 1
-        for (d in 2..3) {
-            val candidate = peakFreq / d
-            if (candidate < MIN_COARSE_HZ) continue
-            val cBin = (candidate / binHz).roundToInt()
-            if (cBin in 1 until half - 1) {
-                val neighbor = max(mag[cBin - 1], max(mag[cBin], mag[cBin + 1]))
-                if (neighbor > SUBHARMONIC_RATIO * peakVal) divisor = d
+        val background = mag.copyOfRange(binMin, binMax + 1).sorted()[((binMax - binMin) / 2)]
+        val peakQuality = ((peakVal / (background + 1e-9) - 1.0) / 12.0).coerceIn(0.0, 1.0)
+        val candidates = (1..3).mapNotNull { divisor ->
+            val frequency = peakFreq / divisor
+            if (frequency < MIN_COARSE_HZ) null else {
+                val bin = (frequency / binHz).toInt().coerceIn(1, half - 2)
+                val local = max(mag[bin - 1], max(mag[bin], mag[bin + 1]))
+                val localQuality = (local / (peakVal + 1e-9)).coerceIn(0.0, 1.0)
+                CoarseCandidate(frequency, (peakQuality * 0.7 + localQuality * 0.3).coerceIn(0.0, 1.0))
             }
         }
-
-        return (peakFreq / divisor) to spectrum
+        return candidates to spectrum
     }
 
     private companion object {
         const val MIN_COARSE_HZ = 30.0
         const val MAX_COARSE_HZ = 2500.0
-        const val SUBHARMONIC_RATIO = 0.4
         const val PEAK_FLOOR = 1.0 // reject silence (a full-scale tone peaks ~500)
         const val GUIDED_CONFIDENCE_FLOOR = 0.5 // below this, use full-range YIN
+        const val CANDIDATE_SEARCH_FRACTION = 0.12
+        const val CANDIDATE_TIE_MARGIN = 0.08
     }
 }

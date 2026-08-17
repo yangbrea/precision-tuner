@@ -16,7 +16,7 @@ class CueSoundPlayer(private val sampleRate: Int = 44100) {
 
     fun play() {
         stop()
-        val buf = ClickSound.generate(DING_FREQ, durationMs = DING_MS, amplitude = DING_AMP)
+        val buf = ClickSound.generateDing(DING_FREQ, durationMs = DING_MS, amplitude = DING_AMP)
         val t = AudioTrack.Builder()
             .setAudioAttributes(
                 AudioAttributes.Builder()
@@ -60,7 +60,7 @@ class CueSoundPlayer(private val sampleRate: Int = 44100) {
     }
 
     private companion object {
-        const val DING_FREQ = 1568.0 // G6
+        const val DING_FREQ = 2093.0 // C7, higher than the old G6 for a sharper ping
         const val DING_MS = 140.0
         const val DING_AMP = 0.4
     }

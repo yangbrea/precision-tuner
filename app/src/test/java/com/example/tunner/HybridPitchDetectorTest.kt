@@ -28,6 +28,27 @@ class HybridPitchDetectorTest {
         return buf
     }
 
+    private fun instrumentBuffer(
+        frequency: Double,
+        fundamental: Double = 0.18,
+        second: Double = 0.55,
+        third: Double = 0.18,
+    ): ShortArray = ShortArray(frameSize) { i ->
+        val t = 2.0 * PI * frequency * i / sampleRate
+        val attack = (i / 300.0).coerceAtMost(1.0)
+        val value = attack * (
+            fundamental * sin(t) + second * sin(2.0 * t) + third * sin(3.0 * t)
+        )
+        (value * 32767.0).toInt().coerceIn(Short.MIN_VALUE.toInt(), Short.MAX_VALUE.toInt()).toShort()
+    }
+
+    private fun assertPitch(buffer: ShortArray, expected: Double, toleranceCents: Double) {
+        val pitch = detector.detect(buffer, sampleRate)
+        assertNotNull("no pitch detected for $expected Hz", pitch)
+        val cents = 1200.0 * ln(pitch!!.frequency / expected) / ln(2.0)
+        assertTrue("expected $expected, got ${pitch.frequency} ($cents cents)", abs(cents) <= toleranceCents)
+    }
+
     private fun assertDetected(expectedFreq: Double, toleranceCents: Double) {
         val pitch = detector.detect(sineBuffer(expectedFreq), sampleRate)
         assertNotNull("no pitch detected for $expectedFreq Hz", pitch)
@@ -69,7 +90,60 @@ class HybridPitchDetectorTest {
         val pitch = detector.detect(signal, sampleRate)
         assertNotNull("no pitch detected for noisy $freq Hz tone", pitch)
         val cents = 1200.0 * (ln(pitch!!.frequency / freq) / ln(2.0))
-        assertTrue("noisy tone error too large: ${"%.1f".format(cents)} cents", abs(cents) <= 20.0)
+        assertTrue("noisy tone error too large: ${"%.1f".format(cents)} cents", abs(cents) <= 8.0)
+    }
+
+    @Test
+    fun strongHarmonicsDoNotCauseOctaveErrors() {
+        val frequencies = listOf(82.41, 164.81, 329.63, 659.25)
+        frequencies.forEach { assertPitch(instrumentBuffer(it), it, 3.0) }
+    }
+
+    @Test
+    fun e3WithLowFrequencyLeakDoesNotDropToE2() {
+        val e3 = 164.81
+        val buffer = instrumentBuffer(e3, fundamental = 0.42, second = 0.28, third = 0.12)
+        for (i in buffer.indices) {
+            val leak = 0.08 * sin(2.0 * PI * (e3 / 2.0) * i / sampleRate)
+            buffer[i] = (buffer[i] + leak * 32767.0).toInt()
+                .coerceIn(Short.MIN_VALUE.toInt(), Short.MAX_VALUE.toInt()).toShort()
+        }
+        assertPitch(buffer, e3, 3.0)
+    }
+
+    @Test
+    fun e3SurvivesIntermittentImpactNoise() {
+        val e3 = 164.81
+        val buffer = instrumentBuffer(e3, fundamental = 0.40, second = 0.30, third = 0.12)
+        for (i in 250 until buffer.size step 700) {
+            buffer[i] = if ((i / 700) % 2 == 0) Short.MAX_VALUE else Short.MIN_VALUE
+        }
+        assertPitch(buffer, e3, 8.0)
+    }
+
+    @Test
+    fun lockedE3IgnoresItsE2SubharmonicCandidate() {
+        val e3 = 164.81
+        val pitch = detector.detectLocked(instrumentBuffer(e3), sampleRate, e3)
+        assertNotNull(pitch)
+        val cents = 1200.0 * ln(pitch!!.frequency / e3) / ln(2.0)
+        assertTrue("locked E3 was ${pitch.frequency}", abs(cents) <= 3.0)
+    }
+
+    @Test
+    fun actualE2IsStrongerThanFalseE3HarmonicLock() {
+        val e2 = 82.41
+        val e3 = 164.81
+        val buffer = instrumentBuffer(e2, fundamental = 0.42, second = 0.30, third = 0.12)
+        val broad = detector.detect(buffer, sampleRate)
+        val locked = detector.detectLocked(buffer, sampleRate, e3)
+        assertNotNull(broad)
+        val cents = 1200.0 * ln(broad!!.frequency / e2) / ln(2.0)
+        assertTrue("broad E2 was ${broad.frequency}", abs(cents) <= 3.0)
+        assertTrue(
+            "false E3 lock was too confident: locked=${locked?.confidence}, broad=${broad.confidence}",
+            locked == null || locked.confidence < broad.confidence - 0.05,
+        )
     }
 
     @Test

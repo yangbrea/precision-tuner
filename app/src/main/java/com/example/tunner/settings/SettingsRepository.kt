@@ -4,6 +4,8 @@ import android.content.Context
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import com.example.tunner.tuning.CustomTuningPreset
+import com.example.tunner.tuning.CustomTuningStore
 
 /**
  * Persists [AppSettings] in SharedPreferences and exposes it as a [StateFlow].
@@ -64,8 +66,15 @@ class SettingsRepository(context: Context) {
         val visual = runCatching {
             VisualMode.valueOf(prefs.getString(KEY_VISUAL, null) ?: "")
         }.getOrDefault(VisualMode.SPECTRUM)
-        val instrument = prefs.getString(KEY_INSTRUMENT, null) ?: "guitar"
-        val tuning = prefs.getString(KEY_TUNING, null) ?: "standard"
+        var instrument = prefs.getString(KEY_INSTRUMENT, null) ?: "guitar"
+        var tuning = prefs.getString(KEY_TUNING, null) ?: "standard"
+        // The old app used (custom, standard) for its single mutable tuning.
+        // That data is intentionally not migrated, so make the stale selection usable.
+        if (instrument == CustomTuningStore.CUSTOM_INSTRUMENT_ID &&
+            !tuning.startsWith(CustomTuningPreset.TUNING_ID_PREFIX)) {
+            instrument = "guitar"
+            tuning = "standard"
+        }
         return AppSettings(
             accent = accent,
             sensitivity = sensitivity,

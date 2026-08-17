@@ -23,6 +23,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -45,6 +46,7 @@ fun SettingsScreen(
     onFilterChange: (Float) -> Unit,
     onThemeModeChange: (ThemeMode) -> Unit,
     onVisualModeChange: (VisualMode) -> Unit,
+    onManageTunings: () -> Unit,
 ) {
     Column(
         modifier = Modifier
@@ -52,6 +54,13 @@ fun SettingsScreen(
             .verticalScroll(rememberScrollState())
             .padding(horizontal = 20.dp, vertical = 8.dp),
     ) {
+        SectionTitle("调弦预设")
+        OutlinedButton(onClick = onManageTunings, modifier = Modifier.fillMaxWidth()) {
+            Text("管理自定义调弦")
+        }
+        Hint("添加、编辑或删除可持久保存的调弦预设")
+
+        Spacer(Modifier.height(28.dp))
         SectionTitle("主题模式")
         ThemeModeRow(selected = settings.themeMode, onSelect = onThemeModeChange)
 

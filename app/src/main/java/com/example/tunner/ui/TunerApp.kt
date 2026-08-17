@@ -3,6 +3,7 @@ package com.example.tunner.ui
 import android.Manifest
 import android.content.pm.PackageManager
 import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.compose.BackHandler
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -32,6 +33,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -50,11 +52,26 @@ import com.example.tunner.metronome.MetronomeViewModel
 fun TunerApp(viewModel: TunerViewModel, metronomeViewModel: MetronomeViewModel) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val settings by viewModel.settings.collectAsStateWithLifecycle()
-    val customMidis by viewModel.customMidis.collectAsStateWithLifecycle()
+    val customPresets by viewModel.customPresets.collectAsStateWithLifecycle()
     val metronomeState by metronomeViewModel.state.collectAsStateWithLifecycle()
     val context = LocalContext.current
     var permissionRequested by rememberSaveable { mutableStateOf(false) }
     var showSettings by rememberSaveable { mutableStateOf(false) }
+    var showPresetManager by rememberSaveable { mutableStateOf(false) }
+
+    val navigateBackFromSettings: () -> Unit = remember(showPresetManager) {
+        {
+            if (showPresetManager) {
+                showPresetManager = false
+            } else {
+                showSettings = false
+            }
+        }
+    }
+
+    BackHandler(enabled = showSettings) {
+        navigateBackFromSettings()
+    }
 
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
@@ -82,12 +99,16 @@ fun TunerApp(viewModel: TunerViewModel, metronomeViewModel: MetronomeViewModel) 
     }
 
     Scaffold(
+        modifier = Modifier.edgeSwipeBack(
+            enabled = showSettings,
+            onBack = navigateBackFromSettings,
+        ),
         topBar = {
             TopAppBar(
-                title = { Text(if (showSettings) "设置" else "调音器 Tuner") },
+                title = { Text(when { showPresetManager -> "调弦预设"; showSettings -> "设置"; else -> "调音器 Tuner" }) },
                 navigationIcon = {
-                    if (showSettings) {
-                        IconButton(onClick = { showSettings = false }) {
+                    if (showSettings || showPresetManager) {
+                        IconButton(onClick = navigateBackFromSettings) {
                             Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
                         }
                     }
@@ -116,6 +137,12 @@ fun TunerApp(viewModel: TunerViewModel, metronomeViewModel: MetronomeViewModel) 
                 .padding(padding),
         ) {
             when {
+                showPresetManager -> TuningPresetScreen(
+                    presets = customPresets,
+                    onCreate = viewModel::createCustomPreset,
+                    onUpdate = viewModel::updateCustomPreset,
+                    onDelete = viewModel::deleteCustomPreset,
+                )
                 showSettings -> SettingsScreen(
                     settings = settings,
                     onAccentChange = viewModel::updateAccent,
@@ -123,6 +150,7 @@ fun TunerApp(viewModel: TunerViewModel, metronomeViewModel: MetronomeViewModel) 
                     onFilterChange = viewModel::updateFilterStrength,
                     onThemeModeChange = viewModel::updateThemeMode,
                     onVisualModeChange = viewModel::updateVisualMode,
+                    onManageTunings = { showPresetManager = true },
                 )
                 state.mode == TunerMode.METRONOME -> MetronomeScreen(
                     state = metronomeState,
@@ -141,14 +169,12 @@ fun TunerApp(viewModel: TunerViewModel, metronomeViewModel: MetronomeViewModel) 
                     state = state,
                     settings = settings,
                     tuning = viewModel.resolveTuning(settings.instrumentId, settings.tuningId),
-                    customMidis = customMidis,
+                    customPresets = customPresets,
                     onSelectString = viewModel::selectString,
                     onSelectInstrument = viewModel::updateInstrument,
                     onSelectTuning = viewModel::updateTuning,
                     onToggleReferenceTone = viewModel::toggleReferenceTone,
-                    onShiftCustomString = viewModel::shiftCustomString,
-                    onAddCustomString = viewModel::addCustomString,
-                    onRemoveCustomString = viewModel::removeCustomString,
+                    onSelectCustomPreset = viewModel::selectCustomPreset,
                 )
                 else -> ChromaticScreen(
                     state = state,
