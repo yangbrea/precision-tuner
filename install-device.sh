@@ -3,7 +3,7 @@ set -euo pipefail
 
 project_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 apk_path="$project_dir/app/build/outputs/apk/debug/app-debug.apk"
-package_name="com.example.tunner"
+package_name="com.precisiontuner"
 requested_serial=""
 tiny_crepe_enabled=false
 for argument in "$@"; do

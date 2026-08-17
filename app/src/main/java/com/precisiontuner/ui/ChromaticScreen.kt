@@ -112,6 +112,13 @@ fun ChromaticScreen(
                 modifier = Modifier.align(Alignment.CenterHorizontally),
             )
         }
+
+        // Keep the reference controls visually separate from the persistent
+        // navigation bar. The larger dial consumes most of the flexible space,
+        // so it needs an explicit gap instead of relying on Spacer(weight).
+        Spacer(
+            Modifier.height(if (settings.gaugeStyle == GaugeStyle.DIAL) 20.dp else 8.dp),
+        )
     }
 }
 
