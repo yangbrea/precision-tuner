@@ -10,6 +10,8 @@ import com.example.tunner.audio.LowPassFilter
 import com.example.tunner.audio.ReferenceToneEngine
 import com.example.tunner.audio.downsampleWaveform
 import com.example.tunner.pitch.HybridPitchDetector
+import com.example.tunner.pitch.AutomaticStringState
+import com.example.tunner.pitch.AutomaticStringTracker
 import com.example.tunner.pitch.NoiseFloorEstimator
 import com.example.tunner.pitch.OnlinePitchTracker
 import com.example.tunner.pitch.Pitch
@@ -64,6 +66,8 @@ class TunerViewModel(application: Application) : AndroidViewModel(application) {
     private val noiseEstimator = NoiseFloorEstimator()
     private val pitchTracker = OnlinePitchTracker(lagFrames = TRACKER_LAG_FRAMES)
     private val onsetDetector = RmsOnsetDetector()
+    private val automaticStringTracker = AutomaticStringTracker(releaseFrames = HOLD_FRAMES)
+    private var automaticStringState = AutomaticStringState(null, null, 0, null, "reset")
 
     // Frame buffers (window is the filtered sliding frame; hop is the raw chunk
     // read each cycle and filtered before being appended).
@@ -245,15 +249,24 @@ class TunerViewModel(application: Application) : AndroidViewModel(application) {
         // to that string's pitch (±~100 cents) for robustness against harmonics
         // and other strings.
         val selectedNumber = _state.value.selectedString
-        val lockedString = if (mode == TunerMode.INSTRUMENT && selectedNumber != null) {
+        val manualString = if (mode == TunerMode.INSTRUMENT && selectedNumber != null) {
             tuning?.byNumber(selectedNumber)
         } else null
+        val automaticMode = mode == TunerMode.INSTRUMENT && selectedNumber == null
+        val previousAutomaticString = if (automaticMode) automaticStringTracker.activeString(tuning) else null
 
         val rms = noiseEstimator.rms(window)
         if (!noiseEstimator.shouldAnalyze(rms, signalToNoiseRatio(s.sensitivity))) {
             noiseEstimator.observeRejected(rms)
-            pitchTracker.submit(emptyList(), lockedString?.frequency)
-            rejectFrame(lockedString, waveform, emptyList(), rms, "noise_gate", 0, false, startedNanos)
+            if (automaticMode) {
+                automaticStringState = automaticStringTracker.submit(
+                    tuning, emptyList(), false, false, 0.0, s.sensitivity.confidence,
+                )
+                _state.update { it.copy(activeString = automaticStringState.activeString?.number) }
+            }
+            val target = manualString ?: automaticStringTracker.activeString(tuning)
+            pitchTracker.submit(emptyList(), target?.frequency)
+            rejectFrame(target, waveform, emptyList(), rms, "noise_gate", 0, false, startedNanos)
             return
         }
 
@@ -262,21 +275,42 @@ class TunerViewModel(application: Application) : AndroidViewModel(application) {
         // In manual mode the target-guided detector runs independently of the
         // broad estimate. This is the key guard against E3 being rejected just
         // because the FFT/YIN broad path briefly reports its E2 sub-harmonic.
-        val lockedPitch = lockedString?.let {
+        val detectionTarget = manualString ?: previousAutomaticString
+        val lockedPitch = detectionTarget?.let {
             detector.detectLocked(window, SAMPLE_RATE, it.frequency)
         }
         val broadCandidates = detector.detectCandidates(window, SAMPLE_RATE)
         val spectrum = detector.lastSpectrum?.toList() ?: emptyList()
         val lockedAccepted = lockedPitch != null &&
             lockedPitch.confidence >= s.sensitivity.confidence &&
-            abs(lockedString.centsFrom(lockedPitch.frequency)) <= MANUAL_LOCK_CENTS
+            abs(detectionTarget.centsFrom(lockedPitch.frequency)) <= MANUAL_LOCK_CENTS
+
+        if (automaticMode) {
+            automaticStringState = automaticStringTracker.submit(
+                tuning = tuning,
+                broadCandidates = broadCandidates,
+                lockedAccepted = lockedAccepted,
+                onset = onset,
+                signalToNoiseRatio = rms / noiseEstimator.noiseFloor.coerceAtLeast(1e-9),
+                minimumVoicedProbability = s.sensitivity.confidence,
+            )
+            _state.update { it.copy(activeString = automaticStringState.activeString?.number) }
+        }
+        val lockedString = manualString ?: automaticStringTracker.activeString(tuning)
+        val acceptedLockedPitch = lockedPitch?.takeIf {
+            detectionTarget?.number == lockedString?.number && lockedAccepted
+        }
 
         val candidates = buildList {
-            addAll(broadCandidates.filter { it.voicedProbability >= s.sensitivity.confidence })
-            if (lockedAccepted) {
-                val confidence = lockedPitch!!.confidence
+            addAll(broadCandidates.filter { candidate ->
+                candidate.voicedProbability >= s.sensitivity.confidence &&
+                    (manualString != null || mode != TunerMode.INSTRUMENT ||
+                        lockedString?.let { abs(it.centsFrom(candidate.frequency)) <= AUTO_TARGET_CENTS } == true)
+            })
+            if (acceptedLockedPitch != null) {
+                val confidence = acceptedLockedPitch.confidence
                 add(PitchCandidate(
-                    frequency = lockedPitch.frequency,
+                    frequency = acceptedLockedPitch.frequency,
                     periodicity = confidence,
                     spectralQuality = 1.0,
                     probability = confidence * confidence * confidence,
@@ -323,9 +357,7 @@ class TunerViewModel(application: Application) : AndroidViewModel(application) {
         val octave: Int
         val midi: Int
         val cents: Double
-        val targetString = if (mode == TunerMode.INSTRUMENT) {
-            lockedString ?: tuning?.nearestString(medianFreq)
-        } else null
+        val targetString = if (mode == TunerMode.INSTRUMENT) lockedString else null
         if (targetString != null) {
             noteName = targetString.noteName
             midi = targetString.midi
@@ -355,7 +387,7 @@ class TunerViewModel(application: Application) : AndroidViewModel(application) {
             val activeString = when {
                 st.mode != TunerMode.INSTRUMENT -> null
                 st.selectedString != null -> st.selectedString
-                else -> targetString?.number
+                else -> automaticStringTracker.activeString(tuning)?.number
             }
             st.copy(
                 detectedFrequency = medianFreq,
@@ -435,7 +467,12 @@ class TunerViewModel(application: Application) : AndroidViewModel(application) {
                 "rms=${"%.5f".format(rms)} noise=${"%.5f".format(noiseEstimator.noiseFloor)} " +
                 "candidates=$candidateCount onset=$onset " +
                 "processingMs=${"%.1f".format((System.nanoTime() - startedNanos) / 1_000_000.0)} " +
-                "accepted=$accepted reason=$reason missed=$missedFrames",
+                "accepted=$accepted reason=$reason missed=$missedFrames " +
+                "autoActive=${automaticStringState.activeString?.fullNote} " +
+                "autoPending=${automaticStringState.pendingString?.fullNote} " +
+                "autoFrames=${automaticStringState.confirmationFrames} " +
+                "autoCents=${automaticStringState.candidateCents?.let { "%.1f".format(it) }} " +
+                "autoReason=${automaticStringState.reason}",
         )
     }
 
@@ -443,6 +480,8 @@ class TunerViewModel(application: Application) : AndroidViewModel(application) {
         pitchTracker.reset()
         onsetDetector.reset()
         noiseEstimator.reset()
+        automaticStringTracker.reset()
+        automaticStringState = AutomaticStringState(null, null, 0, null, "reset")
         missedFrames = 0
         val currentState = _state.value
         val currentSettings = settings.value
@@ -481,6 +520,7 @@ class TunerViewModel(application: Application) : AndroidViewModel(application) {
         const val HOP = 2048          // ~46 ms update interval (50% overlap)
         const val HOLD_FRAMES = 22    // ≈1.0s hold before dropping the note
         const val MANUAL_LOCK_CENTS = 100.0
+        const val AUTO_TARGET_CENTS = 250.0
         const val TRACKER_LAG_FRAMES = 3
         const val MAX_TRACKER_CANDIDATES = 5
         const val LOG_EVERY = 10L     // throttle debug logging
