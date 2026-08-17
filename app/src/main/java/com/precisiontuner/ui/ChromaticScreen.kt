@@ -91,7 +91,13 @@ fun ChromaticScreen(
             )
         }
 
-        Spacer(Modifier.weight(1f))
+        Spacer(
+            modifier = if (settings.gaugeStyle == GaugeStyle.DIAL) {
+                Modifier.weight(1f) // tall dial: pin the reference block to the bottom
+            } else {
+                Modifier.height(16.dp) // short rail: keep it right under the spectrum
+            },
+        )
 
         // A4 reference pitch. The live A4 value is already shown in the header
         // ("· A4 = 440 Hz"), so the slider only needs its centered label.
