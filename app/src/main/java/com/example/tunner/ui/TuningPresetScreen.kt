@@ -3,6 +3,8 @@ package com.example.tunner.ui
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
@@ -13,8 +15,16 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusDirection
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardCapitalization
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.example.tunner.tuning.CustomTuningPreset
 import com.example.tunner.tuning.CustomTuningStore
 import com.example.tunner.tuning.InstrumentCatalog
@@ -101,7 +111,7 @@ private fun PresetEditor(
     var error by remember { mutableStateOf<String?>(null) }
 
     ModalBottomSheet(onDismissRequest = onDismiss) {
-        Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 20.dp).padding(bottom = 32.dp)) {
+        Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).imePadding().padding(horizontal = 20.dp).padding(bottom = 32.dp)) {
             Text(if (preset == null) "新增调弦预设" else "编辑调弦预设", style = MaterialTheme.typography.titleLarge)
             Spacer(Modifier.height(16.dp))
             OutlinedTextField(name, { name = it; error = null }, label = { Text("预设名称") }, singleLine = true, modifier = Modifier.fillMaxWidth())
@@ -122,14 +132,73 @@ private fun PresetEditor(
             }
             Spacer(Modifier.height(18.dp))
             midis.forEachIndexed { index, midi ->
-                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                    Text("第${index + 1}弦", modifier = Modifier.weight(1f))
-                    IconButton(onClick = { midis = midis.toMutableList().also { it[index] = (midi - 1).coerceAtLeast(CustomTuningStore.MIN_MIDI) } }) {
-                        Icon(Icons.Filled.Remove, "降半音")
+                var draft by remember(midis, index) { mutableStateOf<String?>(null) }
+                var error by remember(midis, index) { mutableStateOf<String?>(null) }
+                val focusManager = LocalFocusManager.current
+                val isLast = index == midis.lastIndex
+                val commit: () -> Unit = {
+                    val text = draft
+                    if (text != null) {
+                        val trimmed = text.trim()
+                        if (trimmed.isEmpty()) {
+                            draft = null
+                            error = null
+                        } else {
+                            val parsed = NoteMapper.midiFromName(trimmed, midi / 12 - 1)
+                            when {
+                                parsed == null -> {
+                                    // Prompt, then revert the field to the pitch it had before typing.
+                                    error = "无法识别,示例:E4、C#3、Bb2"
+                                    draft = null
+                                }
+                                parsed < CustomTuningStore.MIN_MIDI || parsed > CustomTuningStore.MAX_MIDI -> {
+                                    error = "超出 C1–C7 范围"
+                                    draft = null
+                                }
+                                else -> {
+                                    midis = midis.toMutableList().also { it[index] = parsed }
+                                    draft = null
+                                    error = null
+                                }
+                            }
+                        }
                     }
-                    Text(midiLabel(midi), style = MaterialTheme.typography.titleMedium)
-                    IconButton(onClick = { midis = midis.toMutableList().also { it[index] = (midi + 1).coerceAtMost(CustomTuningStore.MAX_MIDI) } }) {
-                        Icon(Icons.Filled.Add, "升半音")
+                }
+                Column(Modifier.fillMaxWidth()) {
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        Text("第${index + 1}弦", modifier = Modifier.weight(1f))
+                        IconButton(onClick = {
+                            draft = null; error = null
+                            midis = midis.toMutableList().also { it[index] = (midi - 1).coerceAtLeast(CustomTuningStore.MIN_MIDI) }
+                        }) { Icon(Icons.Filled.Remove, "降半音") }
+                        OutlinedTextField(
+                            value = draft ?: midiLabel(midi),
+                            onValueChange = { draft = it; error = null },
+                            singleLine = true,
+                            isError = error != null,
+                            textStyle = MaterialTheme.typography.titleMedium.copy(textAlign = TextAlign.Center),
+                            keyboardOptions = KeyboardOptions(
+                                capitalization = KeyboardCapitalization.None,
+                                autoCorrectEnabled = false,
+                                keyboardType = KeyboardType.Text,
+                                imeAction = if (isLast) ImeAction.Done else ImeAction.Next,
+                            ),
+                            keyboardActions = KeyboardActions(
+                                onDone = { commit(); focusManager.clearFocus() },
+                                onNext = { commit(); focusManager.moveFocus(FocusDirection.Down) },
+                            ),
+                            modifier = Modifier
+                                .width(88.dp)
+                                .onFocusChanged { if (!it.isFocused) commit() },
+                        )
+                        IconButton(onClick = {
+                            draft = null; error = null
+                            midis = midis.toMutableList().also { it[index] = (midi + 1).coerceAtMost(CustomTuningStore.MAX_MIDI) }
+                        }) { Icon(Icons.Filled.Add, "升半音") }
+                    }
+                    error?.let {
+                        Text(it, color = MaterialTheme.colorScheme.error, fontSize = 12.sp,
+                            modifier = Modifier.padding(start = 16.dp, bottom = 4.dp))
                     }
                 }
             }

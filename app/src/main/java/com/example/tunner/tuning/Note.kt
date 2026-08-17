@@ -38,6 +38,45 @@ object NoteMapper {
         "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"
     )
 
+    /** Semitone index of each natural letter, matching [NOTE_NAMES]. */
+    private val LETTER_SEMITONES: Map<Char, Int> = mapOf(
+        'C' to 0, 'D' to 2, 'E' to 4, 'F' to 5, 'G' to 7, 'A' to 9, 'B' to 11,
+    )
+
+    /** Note name syntax: letter, optional #/b accidental, optional octave. */
+    private val NOTE_NAME_REGEX = Regex("^([A-Ga-g])([#b]?)(-?\\d+)?$")
+
+    /**
+     * Parses a note name such as "E4", "D#3" or "Bb2" (case-insensitive,
+     * surrounding whitespace ignored) into a MIDI note number.
+     *
+     * The octave is optional: when omitted, [defaultOctave] is used so typing
+     * just a letter keeps the current octave. Flats are normalized to their
+     * enharmonic sharp spelling (Bb -> A#). Theoretical spellings that never
+     * occur in practical tunings (E#, B#, Cb, Fb) are rejected, as are MIDI
+     * numbers outside the 0..127 range.
+     */
+    fun midiFromName(input: String, defaultOctave: Int): Int? {
+        val match = NOTE_NAME_REGEX.matchEntire(input.trim()) ?: return null
+        val letter = match.groupValues[1].uppercase()
+        val accidental = match.groupValues[2]
+        val octave = match.groupValues[3].toIntOrNull() ?: defaultOctave
+
+        val base = LETTER_SEMITONES[letter[0]] ?: return null
+        val offset = when (accidental) {
+            "#" -> 1
+            "b" -> -1
+            else -> 0
+        }
+        // Theoretical spellings never used in practical tunings.
+        if (accidental == "#" && (letter == "B" || letter == "E")) return null
+        if (accidental == "b" && (letter == "C" || letter == "F")) return null
+
+        val semitone = Math.floorMod(base + offset, 12)
+        val midi = (octave + 1) * 12 + semitone
+        return midi.takeIf { it in 0..127 }
+    }
+
     private fun log2(x: Double): Double = log(x, 2.0)
 
     /** MIDI note number nearest to [freq] under reference [a4]. */
