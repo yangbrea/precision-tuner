@@ -43,29 +43,12 @@ class AutomaticStringTrackerTest {
         assertNull(tracker.submit(tuning, listOf(candidate(4, 0.7)), false, false, 3.0, 0.5).activeString)
     }
 
-    @Test fun `onset guard suppresses transient then switches after three stable frames`() {
+    @Test fun `onset switches to another legal string after three frames`() {
         val tracker = AutomaticStringTracker()
         repeat(3) { tracker.submit(tuning, listOf(candidate(3)), false, false, 8.0, 0.5) }
         assertEquals(3, tracker.submit(tuning, listOf(candidate(2)), false, true, 8.0, 0.5).activeString!!.number)
-        repeat(2) {
-            val state = tracker.submit(tuning, listOf(candidate(4)), false, false, 8.0, 0.5)
-            assertEquals(3, state.activeString!!.number)
-            assertEquals("onset_guard", state.reason)
-        }
-        assertEquals(3, tracker.submit(tuning, listOf(candidate(2)), false, false, 8.0, 0.5).activeString!!.number)
         assertEquals(3, tracker.submit(tuning, listOf(candidate(2)), false, false, 8.0, 0.5).activeString!!.number)
         assertEquals(2, tracker.submit(tuning, listOf(candidate(2)), false, false, 8.0, 0.5).activeString!!.number)
-    }
-
-    @Test fun `late onset clears incomplete initial acquisition`() {
-        val tracker = AutomaticStringTracker()
-        repeat(2) { tracker.submit(tuning, listOf(candidate(4)), false, false, 8.0, 0.5) }
-        tracker.submit(tuning, listOf(candidate(3)), false, true, 8.0, 0.5)
-        repeat(2) { tracker.submit(tuning, listOf(candidate(4)), false, false, 8.0, 0.5) }
-        repeat(2) {
-            assertNull(tracker.submit(tuning, listOf(candidate(3)), false, false, 8.0, 0.5).activeString)
-        }
-        assertEquals(3, tracker.submit(tuning, listOf(candidate(3)), false, false, 8.0, 0.5).activeString!!.number)
     }
 
     @Test fun `strong sustained alternate needs six frames while weak alternate cannot switch`() {

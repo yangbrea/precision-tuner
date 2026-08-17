@@ -68,7 +68,7 @@ class TunerViewModel(application: Application) : AndroidViewModel(application) {
     private val pitchTracker = OnlinePitchTracker(lagFrames = TRACKER_LAG_FRAMES)
     private val onsetDetector = RmsOnsetDetector()
     private val automaticStringTracker = AutomaticStringTracker(releaseFrames = HOLD_FRAMES)
-    private var automaticStringState = AutomaticStringState(null, null, 0, null, 0, "reset")
+    private var automaticStringState = AutomaticStringState(null, null, 0, null, "reset")
     private val inTuneCueGate = InTuneCueGate()
 
     // Frame buffers (window is the filtered sliding frame; hop is the raw chunk
@@ -482,7 +482,6 @@ class TunerViewModel(application: Application) : AndroidViewModel(application) {
                 "autoPending=${automaticStringState.pendingString?.fullNote} " +
                 "autoFrames=${automaticStringState.confirmationFrames} " +
                 "autoCents=${automaticStringState.candidateCents?.let { "%.1f".format(it) }} " +
-                "autoGuard=${automaticStringState.onsetGuardFrames} " +
                 "autoReason=${automaticStringState.reason} " +
                 "cueArmed=${inTuneCueGate.state.armed} " +
                 "cueCenter=${inTuneCueGate.state.centerFrames} " +
@@ -495,7 +494,7 @@ class TunerViewModel(application: Application) : AndroidViewModel(application) {
         onsetDetector.reset()
         noiseEstimator.reset()
         automaticStringTracker.reset()
-        automaticStringState = AutomaticStringState(null, null, 0, null, 0, "reset")
+        automaticStringState = AutomaticStringState(null, null, 0, null, "reset")
         inTuneCueGate.reset()
         missedFrames = 0
         val currentState = _state.value
