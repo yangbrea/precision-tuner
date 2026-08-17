@@ -10,6 +10,7 @@ data class AutomaticStringState(
     val pendingString: InstrumentString?,
     val confirmationFrames: Int,
     val candidateCents: Double?,
+    val onsetGuardFrames: Int,
     val reason: String,
 )
 
@@ -27,7 +28,9 @@ class AutomaticStringTracker(
     private var pendingNumber: Int? = null
     private var pendingFrames = 0
     private var pendingFromOnset = false
+    private var onsetSwitchArmed = false
     private var missedFrames = 0
+    private var onsetGuardFrames = 0
 
     fun activeString(tuning: Tuning?): InstrumentString? =
         activeNumber?.let { tuning?.byNumber(it) }
@@ -43,6 +46,17 @@ class AutomaticStringTracker(
         if (tuning == null || tuning.strings.isEmpty()) {
             reset()
             return state(null, null, "no_tuning")
+        }
+
+        if (onset) {
+            clearPending()
+            onsetSwitchArmed = activeString(tuning) != null
+            onsetGuardFrames = ONSET_GUARD_FRAMES
+            return state(tuning, null, "onset_guard")
+        }
+        if (onsetGuardFrames > 0) {
+            onsetGuardFrames--
+            return state(tuning, null, "onset_guard")
         }
 
         val mapped = broadCandidates.mapNotNull { candidate ->
@@ -79,15 +93,19 @@ class AutomaticStringTracker(
         val alternate = credible?.takeIf { it.string.number != active.number }
         if (alternate == null) {
             clearPending()
+            onsetSwitchArmed = false
         } else {
             val strongSustained = !onset &&
                 alternate.candidate.voicedProbability >= SUSTAINED_VOICED_PROBABILITY &&
                 signalToNoiseRatio >= SUSTAINED_SNR &&
                 abs(alternate.cents) <= SUSTAINED_TARGET_CENTS
             val continuingOnsetSwitch = pendingFromOnset && pendingNumber == alternate.string.number
-            if (onset || continuingOnsetSwitch || strongSustained) {
+            if (onsetSwitchArmed || continuingOnsetSwitch || strongSustained) {
                 confirm(alternate.string.number)
-                if (onset) pendingFromOnset = true
+                if (onsetSwitchArmed) {
+                    pendingFromOnset = true
+                    onsetSwitchArmed = false
+                }
                 val required = if (pendingFromOnset) acquireFrames else sustainedSwitchFrames
                 if (pendingFrames >= required) {
                     activeNumber = alternate.string.number
@@ -112,6 +130,8 @@ class AutomaticStringTracker(
     fun reset() {
         activeNumber = null
         missedFrames = 0
+        onsetGuardFrames = 0
+        onsetSwitchArmed = false
         clearPending()
     }
 
@@ -134,6 +154,7 @@ class AutomaticStringTracker(
         pendingString = pendingNumber?.let { tuning?.byNumber(it) },
         confirmationFrames = pendingFrames,
         candidateCents = cents,
+        onsetGuardFrames = onsetGuardFrames,
         reason = reason,
     )
 
@@ -148,5 +169,6 @@ class AutomaticStringTracker(
         const val SUSTAINED_TARGET_CENTS = 80.0
         const val SUSTAINED_VOICED_PROBABILITY = 0.85
         const val SUSTAINED_SNR = 4.0
+        const val ONSET_GUARD_FRAMES = 2
     }
 }

@@ -12,6 +12,7 @@ import com.example.tunner.audio.downsampleWaveform
 import com.example.tunner.pitch.HybridPitchDetector
 import com.example.tunner.pitch.AutomaticStringState
 import com.example.tunner.pitch.AutomaticStringTracker
+import com.example.tunner.pitch.InTuneCueGate
 import com.example.tunner.pitch.NoiseFloorEstimator
 import com.example.tunner.pitch.OnlinePitchTracker
 import com.example.tunner.pitch.Pitch
@@ -67,7 +68,8 @@ class TunerViewModel(application: Application) : AndroidViewModel(application) {
     private val pitchTracker = OnlinePitchTracker(lagFrames = TRACKER_LAG_FRAMES)
     private val onsetDetector = RmsOnsetDetector()
     private val automaticStringTracker = AutomaticStringTracker(releaseFrames = HOLD_FRAMES)
-    private var automaticStringState = AutomaticStringState(null, null, 0, null, "reset")
+    private var automaticStringState = AutomaticStringState(null, null, 0, null, 0, "reset")
+    private val inTuneCueGate = InTuneCueGate()
 
     // Frame buffers (window is the filtered sliding frame; hop is the raw chunk
     // read each cycle and filtered before being appended).
@@ -332,6 +334,7 @@ class TunerViewModel(application: Application) : AndroidViewModel(application) {
         missedFrames = 0
         val tracked = pitchTracker.submit(candidates, lockedString?.frequency, onset)
         if (tracked == null) {
+            inTuneCueGate.observeInvalid()
             _state.update { it.copy(spectrum = spectrum, waveform = waveform) }
             return
         }
@@ -376,12 +379,18 @@ class TunerViewModel(application: Application) : AndroidViewModel(application) {
             candidates.size, onset, startedNanos,
         )
 
-        // Detect the "not in tune -> in tune" rising edge and fire the cue.
-        val nowInTune = phase == DetectionPhase.TRACKING &&
-            abs(cents) <= TunerState.IN_TUNE_CENTS
-        val wasInTune = _state.value.isInTune
-        val flashTick = _state.value.inTuneFlash + if (nowInTune && !wasInTune) 1 else 0
-        if (nowInTune && !wasInTune) playInTuneCue()
+        val cueTarget = if (mode == TunerMode.INSTRUMENT) {
+            targetString?.let { "instrument:${s.instrumentId}:${s.tuningId}:${it.number}:${it.midi}" }
+        } else {
+            "chromatic:$midi"
+        }
+        val cueTriggered = inTuneCueGate.observe(
+            target = cueTarget,
+            cents = cents,
+            tracking = phase == DetectionPhase.TRACKING,
+        )
+        val flashTick = _state.value.inTuneFlash + if (cueTriggered) 1 else 0
+        if (cueTriggered) playInTuneCue()
 
         _state.update { st ->
             val activeString = when {
@@ -416,6 +425,7 @@ class TunerViewModel(application: Application) : AndroidViewModel(application) {
         onset: Boolean,
         startedNanos: Long,
     ) {
+        inTuneCueGate.observeInvalid()
         missedFrames++
         if (missedFrames >= HOLD_FRAMES) {
             pitchTracker.reset()
@@ -472,7 +482,11 @@ class TunerViewModel(application: Application) : AndroidViewModel(application) {
                 "autoPending=${automaticStringState.pendingString?.fullNote} " +
                 "autoFrames=${automaticStringState.confirmationFrames} " +
                 "autoCents=${automaticStringState.candidateCents?.let { "%.1f".format(it) }} " +
-                "autoReason=${automaticStringState.reason}",
+                "autoGuard=${automaticStringState.onsetGuardFrames} " +
+                "autoReason=${automaticStringState.reason} " +
+                "cueArmed=${inTuneCueGate.state.armed} " +
+                "cueCenter=${inTuneCueGate.state.centerFrames} " +
+                "cueFar=${inTuneCueGate.state.farFrames}",
         )
     }
 
@@ -481,7 +495,8 @@ class TunerViewModel(application: Application) : AndroidViewModel(application) {
         onsetDetector.reset()
         noiseEstimator.reset()
         automaticStringTracker.reset()
-        automaticStringState = AutomaticStringState(null, null, 0, null, "reset")
+        automaticStringState = AutomaticStringState(null, null, 0, null, 0, "reset")
+        inTuneCueGate.reset()
         missedFrames = 0
         val currentState = _state.value
         val currentSettings = settings.value
