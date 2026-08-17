@@ -6,10 +6,10 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class NoiseFloorEstimatorTest {
-    @Test fun `gate adapts upward using rejected frames`() {
+    @Test fun `analyzed unvoiced ambient adapts gate upward`() {
         val gate = NoiseFloorEstimator(initialFloor = 0.001)
         assertTrue(gate.shouldAnalyze(0.01, 2.5))
-        repeat(30) { gate.observeRejected(0.01) }
+        repeat(160) { gate.observeUnvoiced(0.01) }
         assertFalse(gate.shouldAnalyze(0.01, 2.5))
     }
 
@@ -21,7 +21,20 @@ class NoiseFloorEstimatorTest {
 
     @Test fun `single impact cannot immediately close gate`() {
         val gate = NoiseFloorEstimator(initialFloor = 0.001)
-        gate.observeRejected(1.0)
+        gate.observeUnvoiced(1.0)
+        assertTrue(gate.shouldAnalyze(0.004, 2.5))
+    }
+
+    @Test fun `gate rejected sustained tone cannot train floor upward`() {
+        val gate = NoiseFloorEstimator(initialFloor = 0.006)
+        repeat(80) { gate.observeGateRejected(0.01) }
+        assertTrue(gate.shouldAnalyze(0.01, 2.5))
+    }
+
+    @Test fun `recent voiced signal freezes upward ambient learning`() {
+        val gate = NoiseFloorEstimator(initialFloor = 0.001)
+        gate.observeVoiced(0.02)
+        repeat(20) { gate.observeUnvoiced(0.015) }
         assertTrue(gate.shouldAnalyze(0.004, 2.5))
     }
 }

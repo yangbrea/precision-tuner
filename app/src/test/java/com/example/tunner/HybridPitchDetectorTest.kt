@@ -1,6 +1,7 @@
 package com.example.tunner
 
 import com.example.tunner.pitch.HybridPitchDetector
+import com.example.tunner.pitch.OnlinePitchTracker
 import com.example.tunner.pitch.Spectrum
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
@@ -100,6 +101,49 @@ class HybridPitchDetectorTest {
         // A 4096-sample frame contains fewer than four periods of E1; keep a
         // still-tight bound without doubling latency for every other string.
         assertPitch(instrumentBuffer(41.20), 41.20, 5.0)
+    }
+
+    @Test
+    fun e4PrimaryPeriodSuppressesItsA2TriplePeriod() {
+        val e4 = 329.63
+        val candidates = detector.detectCandidates(sineBuffer(e4), sampleRate, maxCandidates = 8)
+        assertTrue(candidates.any { abs(1200.0 * ln(it.frequency / e4) / ln(2.0)) < 5.0 })
+        assertTrue(
+            "E4 candidates contained false A2: ${candidates.map { it.frequency }}",
+            candidates.none { abs(1200.0 * ln(it.frequency / (e4 / 3.0)) / ln(2.0)) < 45.0 },
+        )
+    }
+
+    @Test
+    fun realA2IsNotSuppressedByItsThirdHarmonic() {
+        val a2 = 110.0
+        val candidates = detector.detectCandidates(
+            instrumentBuffer(a2, fundamental = 0.32, second = 0.18, third = 0.45),
+            sampleRate,
+            maxCandidates = 8,
+        )
+        assertTrue(
+            "real A2 missing: ${candidates.map { it.frequency }}",
+            candidates.any { abs(1200.0 * ln(it.frequency / a2) / ln(2.0)) < 8.0 },
+        )
+    }
+
+    @Test
+    fun fluctuatingE4CannotEstablishA2TrackerPath() {
+        val e4 = 329.63
+        val tracker = OnlinePitchTracker(3)
+        val outputs = (0 until 18).mapNotNull { frame ->
+            val amplitude = 0.12 + (frame % 6) * 0.055
+            val tracked = tracker.submit(
+                detector.detectCandidates(sineBuffer(e4, amplitude), sampleRate, maxCandidates = 5),
+            )
+            tracked?.pitch?.frequency
+        }
+        assertTrue(outputs.isNotEmpty())
+        assertTrue(
+            "tracker left E4: $outputs",
+            outputs.all { abs(1200.0 * ln(it / e4) / ln(2.0)) < 8.0 },
+        )
     }
 
     @Test

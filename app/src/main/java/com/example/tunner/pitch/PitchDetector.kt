@@ -18,6 +18,8 @@ data class PitchCandidate(
     val spectralQuality: Double,
     val probability: Double,
     val voicedProbability: Double,
+    /** True for YIN's earliest local minimum that clears the absolute threshold. */
+    val primaryPeriod: Boolean = false,
 )
 
 /**

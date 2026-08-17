@@ -82,7 +82,10 @@ class YinPitchDetector(
                     // minima remain available, but strong periodic minima have
                     // substantially more emission probability.
                     val probability = periodicity * periodicity * periodicity
-                    tau to PitchCandidate(frequency, periodicity, 0.0, probability, periodicity)
+                    tau to PitchCandidate(
+                        frequency, periodicity, 0.0, probability, periodicity,
+                        primaryPeriod = tau == preferredTau,
+                    )
                 }
             }
             .sortedWith(

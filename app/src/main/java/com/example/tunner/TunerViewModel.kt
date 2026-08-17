@@ -281,7 +281,7 @@ class TunerViewModel(application: Application) : AndroidViewModel(application) {
 
         val rms = noiseEstimator.rms(window)
         if (!noiseEstimator.shouldAnalyze(rms, signalToNoiseRatio(s.sensitivity))) {
-            noiseEstimator.observeRejected(rms)
+            noiseEstimator.observeGateRejected(rms)
             if (automaticMode) {
                 automaticStringState = automaticStringTracker.submit(
                     tuning, emptyList(), false, false, 0.0, s.sensitivity.confidence,
@@ -360,7 +360,7 @@ class TunerViewModel(application: Application) : AndroidViewModel(application) {
         }.take(MAX_TRACKER_CANDIDATES)
 
         if (candidates.isEmpty()) {
-            noiseEstimator.observeRejected(rms)
+            noiseEstimator.observeUnvoiced(rms)
             pitchTracker.submit(emptyList(), lockedString?.frequency, onset)
             rejectFrame(lockedString, waveform, spectrum, rms, "periodicity", 0, onset, startedNanos)
             return
@@ -376,7 +376,7 @@ class TunerViewModel(application: Application) : AndroidViewModel(application) {
         }
         val pitch = tracked.pitch
         if (pitch == null || pitch.confidence < s.sensitivity.confidence) {
-            noiseEstimator.observeRejected(rms)
+            noiseEstimator.observeUnvoiced(rms)
             rejectFrame(
                 lockedString, waveform, spectrum, rms, "viterbi_unvoiced",
                 candidates.size, onset, startedNanos,
@@ -384,6 +384,7 @@ class TunerViewModel(application: Application) : AndroidViewModel(application) {
             return
         }
         val medianFreq = pitch.frequency
+        noiseEstimator.observeVoiced(rms)
         val phase = if (lockedString != null &&
             abs(lockedString.centsFrom(medianFreq)) > MANUAL_LOCK_CENTS
         ) DetectionPhase.OUT_OF_RANGE else DetectionPhase.TRACKING
@@ -513,7 +514,10 @@ class TunerViewModel(application: Application) : AndroidViewModel(application) {
             TAG,
             "f=${freq ?: "null"} conf=${"%.2f".format(confidence)} " +
                 "rms=${"%.5f".format(rms)} noise=${"%.5f".format(noiseEstimator.noiseFloor)} " +
+                "noiseUpdate=${noiseEstimator.lastUpdateType} " +
+                "lastVoicedRms=${noiseEstimator.lastVoicedRms?.let { "%.5f".format(it) }} " +
                 "candidates=$candidateCount onset=$onset " +
+                "subharmonic=${detector.lastSubharmonicSuppression} " +
                 "processingMs=${"%.1f".format((System.nanoTime() - startedNanos) / 1_000_000.0)} " +
                 "accepted=$accepted reason=$reason missed=$missedFrames " +
                 "engine=${activeDetectionEngine.name} " +

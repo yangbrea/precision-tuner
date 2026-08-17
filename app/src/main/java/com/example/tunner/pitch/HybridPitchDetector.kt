@@ -25,6 +25,8 @@ class HybridPitchDetector(
 
     var lastSpectrum: FloatArray? = null
         private set
+    var lastSubharmonicSuppression: String? = null
+        private set
 
     override fun detect(buffer: ShortArray, sampleRate: Int): Pitch? {
         val n = min(fftSize, buffer.size)
@@ -73,7 +75,7 @@ class HybridPitchDetector(
                     )
                 }
         }
-        return (guidedCandidates + yin.detectCandidates(buffer, sampleRate, maxCandidates = maxCandidates * 2))
+        val scored = (guidedCandidates + yin.detectCandidates(buffer, sampleRate, maxCandidates = maxCandidates * 2))
             .map { candidate ->
                 val spectralQuality = coarse.maxOfOrNull { coarseCandidate ->
                     val distance = centsDistance(candidate.frequency, coarseCandidate.frequency)
@@ -87,13 +89,54 @@ class HybridPitchDetector(
                         .coerceIn(0.0, 1.0),
                 )
             }
+        val merged = scored
             .sortedByDescending { it.probability }
             .fold(mutableListOf<PitchCandidate>()) { kept, candidate ->
-                if (kept.none { centsDistance(it.frequency, candidate.frequency) < 25.0 }) kept += candidate
+                val duplicate = kept.indexOfFirst { centsDistance(it.frequency, candidate.frequency) < 25.0 }
+                if (duplicate < 0) {
+                    kept += candidate
+                } else if (candidate.primaryPeriod && !kept[duplicate].primaryPeriod) {
+                    kept[duplicate] = kept[duplicate].copy(primaryPeriod = true)
+                }
                 kept
             }
+        return suppressFalseSubharmonics(merged)
+            .sortedByDescending { it.probability }
             .take(maxCandidates)
     }
+
+    /**
+     * YIN also has minima at integer multiples of the real period. Prefer its
+     * earliest threshold-clearing (shortest credible) period unless a longer
+     * period is materially more periodic, which preserves genuine low notes.
+     */
+    private fun suppressFalseSubharmonics(candidates: List<PitchCandidate>): List<PitchCandidate> {
+        val suppressed = mutableListOf<String>()
+        val result = candidates.filter { low ->
+            val suppressor = candidates.firstOrNull { high ->
+                high.frequency > low.frequency &&
+                    high.primaryPeriod &&
+                    integerRatio(high.frequency / low.frequency) != null &&
+                    high.periodicity >= low.periodicity - SUBHARMONIC_PERIODICITY_MARGIN
+            }
+            if (suppressor != null) {
+                suppressed += "${"%.1f".format(low.frequency)}->${"%.1f".format(suppressor.frequency)}" +
+                    "(${integerRatio(suppressor.frequency / low.frequency)}x," +
+                    "p=${"%.2f".format(low.periodicity)}/${"%.2f".format(suppressor.periodicity)})"
+                false
+            } else {
+                true
+            }
+        }
+        lastSubharmonicSuppression = suppressed.takeIf { it.isNotEmpty() }?.joinToString(",")
+        return result
+    }
+
+    private fun integerRatio(ratio: Double): Int? =
+        (2..3).firstOrNull { harmonic ->
+            kotlin.math.abs(1200.0 * kotlin.math.ln(ratio / harmonic) / kotlin.math.ln(2.0)) <=
+                INTEGER_RATIO_TOLERANCE_CENTS
+        }
 
     /** String-locked detection: refine YIN directly around [targetFrequency]. */
     fun detectLocked(buffer: ShortArray, sampleRate: Int, targetFrequency: Double): Pitch? =
@@ -159,5 +202,7 @@ class HybridPitchDetector(
         const val SPECTRAL_MATCH_CENTS = 240.0
         const val SINGLE_FRAME_TIE_MARGIN = 0.08
         const val CANDIDATE_SEARCH_FRACTION = 0.12
+        const val SUBHARMONIC_PERIODICITY_MARGIN = 0.07
+        const val INTEGER_RATIO_TOLERANCE_CENTS = 45.0
     }
 }
