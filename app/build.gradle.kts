@@ -63,14 +63,19 @@ android {
     val tinyCrepeEnabled = providers.gradleProperty("tinyCrepeEnabled")
         .map(String::toBoolean)
         .orElse(false)
+    // Which CREPE capacity to bundle: tiny | small | medium | large | full.
+    // Defaults to tiny; asset dir and model file follow "{capacity}Crepe".
+    val crepeModel = providers.gradleProperty("crepeModel")
+        .orElse("tiny")
     defaultConfig {
         buildConfigField("boolean", "TINY_CREPE_ENABLED", tinyCrepeEnabled.get().toString())
+        buildConfigField("String", "CREPE_MODEL_ASSET", "\"${crepeModel.get()}_crepe_fp16.tflite\"")
         if (tinyCrepeEnabled.get()) {
             ndk { abiFilters += "arm64-v8a" }
         }
     }
     if (tinyCrepeEnabled.get()) {
-        sourceSets.getByName("main").assets.srcDir("src/tinyCrepe/assets")
+        sourceSets.getByName("main").assets.srcDir("src/${crepeModel.get()}Crepe/assets")
     }
 }
 

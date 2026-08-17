@@ -53,7 +53,8 @@ class TinyCrepeShadow private constructor(private val interpreter: InterpreterAp
     override fun close() = interpreter.close()
 
     companion object {
-        const val MODEL_ASSET = "tiny_crepe_fp16.tflite"
+        /** Asset name selected at build time via -PcrepeModel (tiny/small/full). */
+        const val MODEL_ASSET = BuildConfig.CREPE_MODEL_ASSET
         const val INPUT_SIZE = 1024
         const val OUTPUT_SIZE = 360
         private const val CENTS_OFFSET = 1997.3794084376191

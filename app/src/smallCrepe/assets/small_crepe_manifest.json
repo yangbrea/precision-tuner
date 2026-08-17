@@ -1,0 +1,27 @@
+{
+  "source_url": "https://raw.githubusercontent.com/marl/crepe/models/model-small.h5.bz2",
+  "source_sha256": "90a6c62c57d35a275df69344dcf510c56110c267465c86816e3d1ee880eefba5",
+  "weights_sha256": "67cff9f4bf1f3b63496fdcb631b830f994f2904705401cd208d2b86a0d16654a",
+  "tensorflow": "2.15.1",
+  "capacity": "small",
+  "filters": [
+    256,
+    32,
+    32,
+    32,
+    64,
+    128
+  ],
+  "input": [
+    1,
+    1024
+  ],
+  "output": [
+    1,
+    360
+  ],
+  "fp32_sha256": "675874ff3703799b21c6e9680d8c59eeb90b49f0f19ce55ca7eedcff9f34ac99",
+  "fp16_sha256": "82fbaf6a70edf58665bd93c079991b228e46349ef96dfe04d083b5e5dcd3193a",
+  "fp32_max_abs_error": 6.705522537231445e-08,
+  "fp16_max_abs_error": 6.463751196861267e-05
+}
