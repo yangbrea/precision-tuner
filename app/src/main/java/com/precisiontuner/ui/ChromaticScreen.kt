@@ -20,6 +20,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.precisiontuner.TunerState
@@ -39,7 +40,7 @@ fun ChromaticScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .padding(horizontal = 20.dp, vertical = 8.dp),
+            .padding(start = 20.dp, end = 20.dp, top = 8.dp, bottom = 24.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Text(
@@ -51,7 +52,7 @@ fun ChromaticScreen(
         Spacer(Modifier.height(8.dp))
         TemperamentRow(selected = settings.temperament, onSelect = onTemperamentChange)
 
-        Spacer(Modifier.height(10.dp))
+        Spacer(Modifier.height(4.dp))
         Readout(
             noteName = state.noteName,
             octave = state.octave,
@@ -69,10 +70,10 @@ fun ChromaticScreen(
             style = settings.gaugeStyle,
             modifier = Modifier
                 .fillMaxWidth()
-                .height(if (settings.gaugeStyle == GaugeStyle.DIAL) 216.dp else 112.dp),
+                .height(if (settings.gaugeStyle == GaugeStyle.DIAL) 188.dp else 112.dp),
         )
 
-        Spacer(Modifier.height(4.dp))
+        Spacer(Modifier.height(2.dp))
         if (settings.visualMode == VisualMode.WAVEFORM) {
             WaveformView(
                 waveform = state.waveform,
@@ -92,24 +93,21 @@ fun ChromaticScreen(
 
         Spacer(Modifier.weight(1f))
 
-        // A4 reference pitch.
+        // A4 reference pitch. The live A4 value is already shown in the header
+        // ("· A4 = 440 Hz"), so the slider only needs its centered label.
         Column(modifier = Modifier.fillMaxWidth()) {
             Text(
                 text = "基准音 A4（默认 440 Hz）",
                 fontSize = 13.sp,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.fillMaxWidth(),
             )
             Slider(
                 value = state.referenceA4.toFloat(),
                 onValueChange = { onReferenceChange(it.toDouble()) },
                 valueRange = 415f..466f,
                 steps = 50, // one step per Hz
-            )
-            Text(
-                text = "${state.referenceA4.roundToInt()} Hz",
-                fontSize = 14.sp,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.align(Alignment.CenterHorizontally),
             )
         }
 
