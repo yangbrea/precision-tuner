@@ -51,4 +51,23 @@ class LowPassFilterTest {
         assertTrue("82 Hz should pass almost intact, ratio=$lowRatio", lowRatio > 0.85)
         assertTrue("5 kHz should be strongly attenuated, ratio=$highRatio", highRatio < 0.2)
     }
+
+    @Test
+    fun defaultStrengthNowAttenuatesHighHarmonics() {
+        // Default 0.5 maps to ~2.2 kHz cutoff (logarithmic curve): a 5 kHz
+        // harmonic is clearly attenuated while the 500 Hz region still passes.
+        val lowIn = sine(500.0)
+        val highIn = sine(5000.0)
+
+        val lowOut = lowIn.copyOf()
+        val highOut = highIn.copyOf()
+        LowPassFilter(sampleRate.toDouble()).process(lowOut, 0.5f)
+        LowPassFilter(sampleRate.toDouble()).process(highOut, 0.5f)
+
+        val lowRatio = rms(lowOut) / rms(lowIn)
+        val highRatio = rms(highOut) / rms(highIn)
+
+        assertTrue("500 Hz should pass at default strength, ratio=$lowRatio", lowRatio > 0.85)
+        assertTrue("5 kHz should be attenuated at default strength, ratio=$highRatio", highRatio < 0.5)
+    }
 }

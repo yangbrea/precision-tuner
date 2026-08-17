@@ -30,6 +30,8 @@ import com.example.tunner.settings.Sensitivity
 import com.example.tunner.settings.SettingsRepository
 import com.example.tunner.settings.ThemeMode
 import com.example.tunner.settings.VisualMode
+import com.example.tunner.tuning.Temperament
+import com.example.tunner.tuning.Temperaments
 import com.example.tunner.tuning.CustomTuningStore
 import com.example.tunner.tuning.CustomTuningPreset
 import com.example.tunner.tuning.SavePresetResult
@@ -67,7 +69,8 @@ class TunerViewModel(application: Application) : AndroidViewModel(application) {
     private val filter = LowPassFilter()
     private val audioInput = AudioInput(SAMPLE_RATE)
     private val referenceTone = ReferenceToneEngine()
-    private val cueSound = CueSoundPlayer()
+    private val cueSound = CueSoundPlayer(application)
+    private var cueMuteUntilNanos = 0L
     private var collectJob: Job? = null
 
     private val noiseEstimator = NoiseFloorEstimator()
@@ -82,6 +85,8 @@ class TunerViewModel(application: Application) : AndroidViewModel(application) {
     private var pendingTinyCrepeResult: TinyCrepeResult? = null
     private var pendingTinyCrepeRan = false
     private var activeDetectionEngine = DetectionEngine.PYIN_LITE
+    private var crepeValidationFrame = 0
+    private var crepeHoldFrames = 0
 
     // Frame buffers (window is the filtered sliding frame; hop is the raw chunk
     // read each cycle and filtered before being appended).
@@ -136,6 +141,8 @@ class TunerViewModel(application: Application) : AndroidViewModel(application) {
     fun updateVisualMode(mode: VisualMode) = settingsRepository.setVisualMode(mode)
 
     fun updateGaugeStyle(style: GaugeStyle) = settingsRepository.setGaugeStyle(style)
+
+    fun updateTemperament(temperament: Temperament) = settingsRepository.setTemperament(temperament)
 
     fun updateDetectionEngine(engine: DetectionEngine) {
         settingsRepository.setDetectionEngine(engine)
@@ -220,6 +227,9 @@ class TunerViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private fun playInTuneCue() {
+        // The speaker burst bleeds into the mic; freeze detection while the cue
+        // plays so the tuner does not misread the cue as a pitch.
+        cueMuteUntilNanos = System.nanoTime() + CUE_MUTE_MS * 1_000_000L
         viewModelScope.launch(Dispatchers.Default) {
             cueSound.play()
         }
@@ -261,6 +271,7 @@ class TunerViewModel(application: Application) : AndroidViewModel(application) {
 
     private fun processWindow() {
         val startedNanos = System.nanoTime()
+        if (startedNanos < cueMuteUntilNanos) return // frozen while the cue plays
         val s = settings.value
         val detectionEngine = effectiveDetectionEngine(s.detectionEngine)
         activeDetectionEngine = detectionEngine
@@ -305,11 +316,21 @@ class TunerViewModel(application: Application) : AndroidViewModel(application) {
             detector.detectLocked(window, SAMPLE_RATE, it.frequency)
         }
         val broadCandidates = detector.detectCandidates(window, SAMPLE_RATE)
-        val hybridTrigger = if (
-            detectionEngine == DetectionEngine.CREPE_HYBRID && mode == TunerMode.CHROMATIC
-        ) crepeHybridArbitrator.triggerReason(broadCandidates) else null
+        crepeValidationFrame++
+        val hybridTrigger = if (detectionEngine == DetectionEngine.CREPE_HYBRID) {
+            crepeHybridArbitrator.triggerReason(broadCandidates)
+        } else null
+        // While no anchor is established (first pluck from the waiting state) a
+        // lone wrong subharmonic could latch before the periodic validation
+        // runs, so consult CREPE every frame during acquisition.
+        val anchorAcquiring = crepeHybridArbitrator.state.anchorFrequency == null
+        val validationDue = detectionEngine == DetectionEngine.CREPE_HYBRID && (
+            anchorAcquiring || crepeValidationFrame % CREPE_VALIDATION_INTERVAL == 0
+        )
+        val holdDue = detectionEngine == DetectionEngine.CREPE_HYBRID && crepeHoldFrames > 0
         val shouldRunCrepe = tinyCrepeShadow != null && (
-            detectionEngine == DetectionEngine.CREPE_PRIMARY || hybridTrigger != null
+            detectionEngine == DetectionEngine.CREPE_PRIMARY ||
+                hybridTrigger != null || validationDue || holdDue
         )
         if (shouldRunCrepe) {
             pendingTinyCrepeRan = true
@@ -327,9 +348,14 @@ class TunerViewModel(application: Application) : AndroidViewModel(application) {
             )
         }
         val primaryUsesNeural = detectionEngine == DetectionEngine.CREPE_PRIMARY && neuralCandidate != null
+        // While no anchor exists the first lock decides the active string, so
+        // prefer the neural pitch exactly like CREPE_PRIMARY: a DSP subharmonic
+        // (A2 from string resonance) must not win before the anchor exists.
+        val acquisitionUsesNeural = detectionEngine == DetectionEngine.CREPE_HYBRID &&
+            anchorAcquiring && neuralCandidate != null
         val engineCandidates = when {
-            primaryUsesNeural -> listOfNotNull(neuralCandidate)
-            detectionEngine == DetectionEngine.CREPE_HYBRID && mode == TunerMode.CHROMATIC ->
+            primaryUsesNeural || acquisitionUsesNeural -> listOfNotNull(neuralCandidate)
+            detectionEngine == DetectionEngine.CREPE_HYBRID ->
                 crepeHybridArbitrator.arbitrate(
                     candidates = broadCandidates,
                     neuralFrequency = pendingTinyCrepeResult?.frequency,
@@ -338,6 +364,16 @@ class TunerViewModel(application: Application) : AndroidViewModel(application) {
                     triggerReason = hybridTrigger,
                 )
             else -> broadCandidates
+        }
+        // A veto is one frame of evidence; hold the neural engine on for a few
+        // frames so the anchor can seed and the auto string tracker can
+        // accumulate enough consecutive frames to switch to the correct string.
+        if (detectionEngine == DetectionEngine.CREPE_HYBRID) {
+            if (crepeHybridArbitrator.state.decisionSource == "crepe_veto") {
+                crepeHoldFrames = CREPE_HOLD_FRAMES
+            } else if (crepeHoldFrames > 0) {
+                crepeHoldFrames--
+            }
         }
         val spectrum = detector.lastSpectrum?.toList() ?: emptyList()
         val lockedAccepted = lockedPitch != null &&
@@ -407,7 +443,7 @@ class TunerViewModel(application: Application) : AndroidViewModel(application) {
         }
         val medianFreq = pitch.frequency
         noiseEstimator.observeVoiced(rms)
-        if (detectionEngine == DetectionEngine.CREPE_HYBRID && mode == TunerMode.CHROMATIC) {
+        if (detectionEngine == DetectionEngine.CREPE_HYBRID) {
             crepeHybridArbitrator.observeAccepted(medianFreq)
         }
         val phase = if (lockedString != null &&
@@ -417,7 +453,7 @@ class TunerViewModel(application: Application) : AndroidViewModel(application) {
         val observedNote = NoteMapper.noteFromFrequency(medianFreq, a4)
 
         // Instrument mode always reports deviation from a target in the active
-        // tuning. Chromatic mode continues to use the nearest 12-TET note.
+        // tuning. Chromatic mode resolves against the selected temperament.
         val noteName: String
         val octave: Int
         val midi: Int
@@ -429,11 +465,11 @@ class TunerViewModel(application: Application) : AndroidViewModel(application) {
             octave = targetString.midi / 12 - 1
             cents = targetString.centsFrom(medianFreq)
         } else {
-            val note = NoteMapper.noteFromFrequency(medianFreq, a4)
+            val note = Temperaments.nearestNote(medianFreq, a4, s.temperament)
             noteName = note.name
             octave = note.octave
             midi = note.midi
-            cents = NoteMapper.cents(medianFreq, a4)
+            cents = note.cents
         }
 
         logFrame(
@@ -444,7 +480,7 @@ class TunerViewModel(application: Application) : AndroidViewModel(application) {
         val cueTarget = if (mode == TunerMode.INSTRUMENT) {
             targetString?.let { "instrument:${s.instrumentId}:${s.tuningId}:${it.number}:${it.midi}" }
         } else {
-            "chromatic:$midi"
+            "chromatic:${s.temperament.name}:$midi"
         }
         val cueTriggered = inTuneCueGate.observe(
             target = cueTarget,
@@ -488,9 +524,7 @@ class TunerViewModel(application: Application) : AndroidViewModel(application) {
         startedNanos: Long,
     ) {
         inTuneCueGate.observeInvalid()
-        if (activeDetectionEngine == DetectionEngine.CREPE_HYBRID &&
-            _state.value.mode == TunerMode.CHROMATIC
-        ) {
+        if (activeDetectionEngine == DetectionEngine.CREPE_HYBRID) {
             crepeHybridArbitrator.observeMissing()
         }
         missedFrames++
@@ -597,11 +631,14 @@ class TunerViewModel(application: Application) : AndroidViewModel(application) {
         noiseEstimator.reset()
         automaticStringTracker.reset()
         crepeHybridArbitrator.reset()
+        crepeValidationFrame = 0
+        crepeHoldFrames = 0
         automaticStringState = AutomaticStringState(null, null, 0, null, "reset")
         inTuneCueGate.reset()
         pendingTinyCrepeResult = null
         pendingTinyCrepeRan = false
         missedFrames = 0
+        cueMuteUntilNanos = 0
         val currentState = _state.value
         val currentSettings = settings.value
         val manualTarget = if (
@@ -629,6 +666,7 @@ class TunerViewModel(application: Application) : AndroidViewModel(application) {
 
     override fun onCleared() {
         tinyCrepeShadow?.close()
+        cueSound.close()
         stopListening()
         super.onCleared()
     }
@@ -643,6 +681,9 @@ class TunerViewModel(application: Application) : AndroidViewModel(application) {
         const val AUTO_TARGET_CENTS = 250.0
         const val TRACKER_LAG_FRAMES = 3
         const val MAX_TRACKER_CANDIDATES = 5
+        const val CREPE_VALIDATION_INTERVAL = 8 // ~0.37s between background CREPE checks
+        const val CREPE_HOLD_FRAMES = 8         // frames to keep CREPE on after a veto
+        const val CUE_MUTE_MS = 700L            // freeze detection while the cue plays (asset ~560ms + tail)
         const val LOG_EVERY = 10L     // throttle debug logging
     }
 }

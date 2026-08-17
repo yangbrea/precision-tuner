@@ -1,29 +1,39 @@
 package com.example.tunner.ui
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.tunner.TunerState
 import com.example.tunner.settings.AppSettings
 import com.example.tunner.settings.GaugeStyle
 import com.example.tunner.settings.VisualMode
+import com.example.tunner.tuning.Temperament
 import kotlin.math.roundToInt
 
 @Composable
 fun ChromaticScreen(
     state: TunerState,
     settings: AppSettings,
+    onTemperamentChange: (Temperament) -> Unit,
     onReferenceChange: (Double) -> Unit,
 ) {
     Column(
@@ -33,12 +43,15 @@ fun ChromaticScreen(
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Text(
-            text = "十二平均律 · A4 = ${state.referenceA4.roundToInt()} Hz",
+            text = "${settings.temperament.label} · A4 = ${state.referenceA4.roundToInt()} Hz",
             fontSize = 16.sp,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
 
         Spacer(Modifier.height(8.dp))
+        TemperamentRow(selected = settings.temperament, onSelect = onTemperamentChange)
+
+        Spacer(Modifier.height(10.dp))
         Readout(
             noteName = state.noteName,
             octave = state.octave,
@@ -98,6 +111,43 @@ fun ChromaticScreen(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.align(Alignment.CenterHorizontally),
             )
+        }
+    }
+}
+
+@Composable
+private fun TemperamentRow(selected: Temperament, onSelect: (Temperament) -> Unit) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Temperament.entries.forEach { temperament ->
+            val isSelected = temperament == selected
+            val accent = MaterialTheme.colorScheme.primary
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .background(
+                        if (isSelected) accent.copy(alpha = 0.2f) else MaterialTheme.colorScheme.surfaceVariant,
+                        RoundedCornerShape(10.dp),
+                    )
+                    .border(
+                        width = 1.5.dp,
+                        color = if (isSelected) accent else MaterialTheme.colorScheme.outlineVariant,
+                        shape = RoundedCornerShape(10.dp),
+                    )
+                    .clickable { onSelect(temperament) }
+                    .padding(vertical = 8.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    text = temperament.label,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 1,
+                    color = if (isSelected) accent else MaterialTheme.colorScheme.onBackground,
+                )
+            }
         }
     }
 }

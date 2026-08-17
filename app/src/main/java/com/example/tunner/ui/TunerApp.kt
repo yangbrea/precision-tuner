@@ -181,6 +181,7 @@ fun TunerApp(viewModel: TunerViewModel, metronomeViewModel: MetronomeViewModel) 
                 else -> ChromaticScreen(
                     state = state,
                     settings = settings,
+                    onTemperamentChange = viewModel::updateTemperament,
                     onReferenceChange = viewModel::setReferenceA4,
                 )
             }

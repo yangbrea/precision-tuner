@@ -43,8 +43,47 @@ class CrepeHybridArbitrator(private val releaseFrames: Int = 22) {
         minimumConfidence: Double,
         triggerReason: String?,
     ): List<PitchCandidate> {
-        if (triggerReason == null || neuralFrequency == null || neuralConfidence < minimumConfidence) {
+        if (neuralFrequency == null || neuralConfidence < minimumConfidence) {
             state = CrepeHybridState(anchorFrequency, triggerReason, null, 0, "dsp_fallback")
+            return candidates
+        }
+
+        if (triggerReason == null) {
+            // Proactive veto: no visible integer conflict, but the DSP's single
+            // best credible hypothesis is an integer submultiple of the neural
+            // pitch (e.g. A2 while CREPE hears E4, common with string resonance).
+            // Promote to the neural pitch so a lone wrong subharmonic cannot
+            // deadlock into an anchor. Only promote upward: if CREPE were lower
+            // than the DSP best it is left untouched so a rare bad read cannot
+            // latch a wrong low anchor.
+            val best = candidates
+                .filter { it.voicedProbability >= MIN_TRIGGER_CONFIDENCE }
+                .maxByOrNull { it.probability }
+            if (best != null && neuralFrequency > best.frequency &&
+                integerRatio(best.frequency, neuralFrequency) != null
+            ) {
+                state = CrepeHybridState(
+                    anchorFrequency, null, neuralFrequency,
+                    if (state.supportedFrequency?.let {
+                            centsDistance(it, neuralFrequency) <= SUPPORT_CENTS
+                        } == true
+                    ) state.confirmationFrames + 1 else 1,
+                    "crepe_veto",
+                )
+                // The vetoed hypothesis is backed by the DSP's own strong
+                // periodicity at the subharmonic (the same voiced signal), so
+                // carry that evidence up to the neural pitch. Otherwise the
+                // string tracker's sustained-switch confidence gate (0.85) can
+                // never be reached and a latched wrong string stays forever.
+                return listOf(PitchCandidate(
+                    frequency = neuralFrequency,
+                    periodicity = neuralConfidence,
+                    spectralQuality = 1.0,
+                    probability = max(neuralConfidence, best.probability),
+                    voicedProbability = max(neuralConfidence, best.voicedProbability),
+                ))
+            }
+            state = CrepeHybridState(anchorFrequency, null, null, 0, "dsp_fallback")
             return candidates
         }
 

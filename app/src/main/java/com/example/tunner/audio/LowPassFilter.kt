@@ -10,8 +10,9 @@ import kotlin.math.exp
  * the detector lock onto the fundamental (especially on low guitar strings).
  *
  * [strength] is 0..1: 0 bypasses the filter entirely; otherwise it maps to a
- * cutoff frequency from 12000 Hz down to 400 Hz via
- * `alpha = 1 - exp(-2π·cutoff / sampleRate)`.
+ * cutoff frequency from 12000 Hz down to 400 Hz on a logarithmic curve
+ * (`cutoff = 12000 * (400/12000)^strength`), so the default 0.5 sits at
+ * ~2.2 kHz instead of the old linear 6.2 kHz and actually filters something.
  *
  * The filter is stateful across frames; changing the strength resets its state.
  */
@@ -39,8 +40,10 @@ class LowPassFilter(private val sampleRate: Double = 44100.0) {
         val cutoff = if (strength <= 0f) {
             Double.POSITIVE_INFINITY
         } else {
-            // strength 0+ -> 12 kHz (weak), strength 1 -> 400 Hz (strong).
-            MAX_CUTOFF - (MAX_CUTOFF - MIN_CUTOFF) * strength
+            // Logarithmic map: 12 kHz at 0+ (weak, nearly no filtering), 400 Hz
+            // at 1 (strong). The default 0.5 → ~2.2 kHz, low enough to cut the
+            // harmonic cloud above the fundamental.
+            MAX_CUTOFF * Math.pow(MIN_CUTOFF / MAX_CUTOFF, strength.toDouble())
         }
         alpha = if (cutoff == Double.POSITIVE_INFINITY) {
             1.0

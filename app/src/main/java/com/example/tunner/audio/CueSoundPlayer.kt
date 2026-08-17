@@ -1,67 +1,62 @@
 package com.example.tunner.audio
 
+import android.content.Context
 import android.media.AudioAttributes
-import android.media.AudioFormat
-import android.media.AudioTrack
+import android.media.SoundPool
+import android.util.Log
 
 /**
- * Plays a one-shot "in tune" cue ("ding") via a short [AudioTrack].
+ * Plays the one-shot "in tune" cue ("ding") from the bundled Kenney CC0
+ * confirmation sound via a [SoundPool].
  *
- * The sample is generated with [ClickSound.generate] (a decaying sine) and
- * played once; the track is released automatically when playback finishes.
+ * The asset is loaded asynchronously; [play] is a no-op until the load
+ * completes (which is effectively instant for a bundled asset).
  */
-class CueSoundPlayer(private val sampleRate: Int = 44100) {
+class CueSoundPlayer(context: Context) {
 
-    private var track: AudioTrack? = null
+    private val soundPool = SoundPool.Builder()
+        .setMaxStreams(MAX_STREAMS)
+        .setAudioAttributes(
+            AudioAttributes.Builder()
+                .setUsage(AudioAttributes.USAGE_MEDIA)
+                .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                .build()
+        )
+        .build()
+    private var soundId = 0
+    private var loaded = false
 
-    fun play() {
-        stop()
-        val buf = ClickSound.generateDing(DING_FREQ, durationMs = DING_MS, amplitude = DING_AMP)
-        val t = AudioTrack.Builder()
-            .setAudioAttributes(
-                AudioAttributes.Builder()
-                    .setUsage(AudioAttributes.USAGE_MEDIA)
-                    .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
-                    .build()
-            )
-            .setAudioFormat(
-                AudioFormat.Builder()
-                    .setSampleRate(sampleRate)
-                    .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
-                    .setChannelMask(AudioFormat.CHANNEL_OUT_MONO)
-                    .build()
-            )
-            .setBufferSizeInBytes(buf.size * 2)
-            .setTransferMode(AudioTrack.MODE_STATIC)
-            .build()
-        t.write(buf, 0, buf.size)
-        t.setNotificationMarkerPosition(buf.size)
-        t.setPlaybackPositionUpdateListener(object : AudioTrack.OnPlaybackPositionUpdateListener {
-            override fun onMarkerReached(at: AudioTrack) {
-                this@CueSoundPlayer.track = null
-                at.release()
+    init {
+        soundId = runCatching {
+            context.applicationContext.assets.openFd(ASSET_PATH).use { fd ->
+                soundPool.load(fd, 1)
             }
-
-            override fun onPeriodicNotification(at: AudioTrack) {}
-        })
-        t.play()
-        track = t
-    }
-
-    fun stop() {
-        track?.let {
-            track = null
-            try {
-                it.release()
-            } catch (_: Exception) {
-                // already released
+        }.getOrElse {
+            Log.e(TAG, "cue sound asset missing: $ASSET_PATH", it)
+            0
+        }
+        if (soundId != 0) {
+            soundPool.setOnLoadCompleteListener { _, id, status ->
+                if (id == soundId && status == 0) loaded = true
             }
         }
     }
 
+    /** Plays the cue once; safe to call repeatedly (overlapping retriggers stop). */
+    fun play() {
+        if (!loaded || soundId == 0) return
+        soundPool.play(soundId, PLAY_VOLUME, PLAY_VOLUME, 1, 0, 1f)
+    }
+
+    /** Releases the pool. Must be called when the owner is disposed. */
+    fun close() {
+        soundPool.release()
+    }
+
     private companion object {
-        const val DING_FREQ = 2093.0 // C7, higher than the old G6 for a sharper ping
-        const val DING_MS = 140.0
-        const val DING_AMP = 0.4
+        const val TAG = "CueSound"
+        const val ASSET_PATH = "sounds/confirmation_002.wav"
+        const val MAX_STREAMS = 2
+        const val PLAY_VOLUME = 0.9f
     }
 }

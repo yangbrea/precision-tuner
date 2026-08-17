@@ -11,7 +11,7 @@ data class InTuneCueState(
 /** Debounces the audible and visual "in tune" event with hysteresis. */
 class InTuneCueGate(
     private val centerCents: Double = 5.0,
-    private val centerFramesRequired: Int = 3,
+    private val centerFramesRequired: Int = DEFAULT_CENTER_FRAMES,
     private val rearmCents: Double = 12.0,
     private val rearmFramesRequired: Int = 4,
 ) {
@@ -67,5 +67,15 @@ class InTuneCueGate(
         armed = true
         centerFrames = 0
         farFrames = 0
+    }
+
+    companion object {
+        /**
+         * Consecutive in-tune frames (|cents| <= [centerCents]) required before
+         * the cue fires. A pluck glides through the center quickly, so a short
+         * window would cue on a momentary pass: at the app's ~21.5 fps frame
+         * rate (46 ms hop) 10 frames ≈ 460 ms of sustained in-tune pitch.
+         */
+        const val DEFAULT_CENTER_FRAMES = 10
     }
 }

@@ -1,6 +1,7 @@
 package com.example.tunner.settings
 
 import androidx.compose.ui.graphics.Color
+import com.example.tunner.tuning.Temperament
 
 /** Dark vs light app theme. */
 enum class ThemeMode { DARK, LIGHT }
@@ -29,6 +30,7 @@ data class AppSettings(
     val themeMode: ThemeMode = ThemeMode.DARK,
     val visualMode: VisualMode = VisualMode.SPECTRUM,
     val gaugeStyle: GaugeStyle = GaugeStyle.RAIL,
+    val temperament: Temperament = Temperament.EQUAL,
     val detectionEngine: DetectionEngine = DetectionEngine.CREPE_HYBRID,
 
     // Selected instrument & tuning for the instrument tuner.

@@ -6,6 +6,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import com.example.tunner.tuning.CustomTuningPreset
 import com.example.tunner.tuning.CustomTuningStore
+import com.example.tunner.tuning.Temperament
 
 /**
  * Persists [AppSettings] in SharedPreferences and exposes it as a [StateFlow].
@@ -33,6 +34,8 @@ class SettingsRepository(context: Context) {
 
     fun setGaugeStyle(style: GaugeStyle) = update { it.copy(gaugeStyle = style) }
 
+    fun setTemperament(temperament: Temperament) = update { it.copy(temperament = temperament) }
+
     fun setDetectionEngine(engine: DetectionEngine) = update { it.copy(detectionEngine = engine) }
 
     /** Select an instrument and reset its tuning to the instrument's default. */
@@ -52,6 +55,7 @@ class SettingsRepository(context: Context) {
             .putString(KEY_THEME, next.themeMode.name)
             .putString(KEY_VISUAL, next.visualMode.name)
             .putString(KEY_GAUGE_STYLE, next.gaugeStyle.name)
+            .putString(KEY_TEMPERAMENT, next.temperament.name)
             .putString(KEY_DETECTION_ENGINE, next.detectionEngine.name)
             .putString(KEY_INSTRUMENT, next.instrumentId)
             .putString(KEY_TUNING, next.tuningId)
@@ -75,6 +79,9 @@ class SettingsRepository(context: Context) {
         val gaugeStyle = runCatching {
             GaugeStyle.valueOf(prefs.getString(KEY_GAUGE_STYLE, null) ?: "")
         }.getOrDefault(GaugeStyle.RAIL)
+        val temperament = runCatching {
+            Temperament.valueOf(prefs.getString(KEY_TEMPERAMENT, null) ?: "")
+        }.getOrDefault(Temperament.EQUAL)
         val storedEngine = prefs.getString(KEY_DETECTION_ENGINE, null)
         val detectionEngine = if (storedEngine == "CREPE_SHADOW") {
             DetectionEngine.CREPE_HYBRID
@@ -97,6 +104,7 @@ class SettingsRepository(context: Context) {
             themeMode = theme,
             visualMode = visual,
             gaugeStyle = gaugeStyle,
+            temperament = temperament,
             detectionEngine = detectionEngine,
             instrumentId = instrument,
             tuningId = tuning,
@@ -111,6 +119,7 @@ class SettingsRepository(context: Context) {
         const val KEY_THEME = "theme"
         const val KEY_VISUAL = "visual"
         const val KEY_GAUGE_STYLE = "gaugeStyle"
+        const val KEY_TEMPERAMENT = "temperament"
         const val KEY_DETECTION_ENGINE = "detectionEngine"
         const val KEY_INSTRUMENT = "instrument"
         const val KEY_TUNING = "tuning"
