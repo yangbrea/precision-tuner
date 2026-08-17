@@ -63,4 +63,16 @@ class YinPitchDetectorTest {
         val noise = ShortArray(frameSize) { (rnd.nextInt(65536) - 32768).toShort() }
         assertNull(detector.detect(noise, sampleRate))
     }
+
+    @Test
+    fun exposesMultiplePeriodicCandidatesForTracking() {
+        val candidates = detector.detectCandidates(sineBuffer(164.81), sampleRate, maxCandidates = 5)
+        assertTrue(candidates.isNotEmpty())
+        assertTrue(candidates.size <= 5)
+        assertTrue(candidates.any { candidate ->
+            val cents = 1200.0 * ln(candidate.frequency / 164.81) / ln(2.0)
+            abs(cents) <= 3.0
+        })
+        assertTrue(candidates.all { it.probability in 0.0..1.0 && it.voicedProbability in 0.0..1.0 })
+    }
 }

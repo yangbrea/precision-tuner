@@ -95,8 +95,11 @@ class HybridPitchDetectorTest {
 
     @Test
     fun strongHarmonicsDoNotCauseOctaveErrors() {
-        val frequencies = listOf(82.41, 164.81, 329.63, 659.25)
+        val frequencies = listOf(55.0, 73.42, 82.41, 164.81, 329.63, 659.25)
         frequencies.forEach { assertPitch(instrumentBuffer(it), it, 3.0) }
+        // A 4096-sample frame contains fewer than four periods of E1; keep a
+        // still-tight bound without doubling latency for every other string.
+        assertPitch(instrumentBuffer(41.20), 41.20, 5.0)
     }
 
     @Test
@@ -119,6 +122,19 @@ class HybridPitchDetectorTest {
             buffer[i] = if ((i / 700) % 2 == 0) Short.MAX_VALUE else Short.MIN_VALUE
         }
         assertPitch(buffer, e3, 8.0)
+    }
+
+    @Test
+    fun bassE2SurvivesPowerLineHum() {
+        val e2 = 82.41
+        val buffer = instrumentBuffer(e2, fundamental = 0.42, second = 0.30, third = 0.12)
+        for (i in buffer.indices) {
+            val hum = 0.08 * sin(2.0 * PI * 50.0 * i / sampleRate) +
+                0.04 * sin(2.0 * PI * 100.0 * i / sampleRate)
+            buffer[i] = (buffer[i] + hum * 32767.0).toInt()
+                .coerceIn(Short.MIN_VALUE.toInt(), Short.MAX_VALUE.toInt()).toShort()
+        }
+        assertPitch(buffer, e2, 8.0)
     }
 
     @Test
