@@ -5,11 +5,11 @@ plugins {
 }
 
 android {
-    namespace = "com.example.tunner"
+    namespace = "com.precisiontuner"
     compileSdk = 36
 
     defaultConfig {
-        applicationId = "com.example.tunner"
+        applicationId = "com.precisiontuner"
         minSdk = 24
         targetSdk = 36
         versionCode = 2
@@ -64,9 +64,10 @@ android {
         .map(String::toBoolean)
         .orElse(false)
     // Which CREPE capacity to bundle: tiny | small | medium | large | full.
-    // Defaults to tiny; asset dir and model file follow "{capacity}Crepe".
+    // Defaults to small (best measured on-device accuracy/speed tradeoff);
+    // asset dir and model file follow "{capacity}Crepe".
     val crepeModel = providers.gradleProperty("crepeModel")
-        .orElse("tiny")
+        .orElse("small")
     defaultConfig {
         buildConfigField("boolean", "TINY_CREPE_ENABLED", tinyCrepeEnabled.get().toString())
         buildConfigField("String", "CREPE_MODEL_ASSET", "\"${crepeModel.get()}_crepe_fp16.tflite\"")
