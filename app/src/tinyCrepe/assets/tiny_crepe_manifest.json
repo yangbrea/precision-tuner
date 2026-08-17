@@ -1,0 +1,18 @@
+{
+  "source_url": "https://raw.githubusercontent.com/marl/crepe/models/model-tiny.h5.bz2",
+  "source_sha256": "9c1d76d405674d2327f5636347d07f551dfd11c6acc0475b7fd85082cdab0add",
+  "weights_sha256": "409254d6a537cc432061112b7ec5f6fd283658f108fc2abc24db9c25858b42df",
+  "tensorflow": "2.15.1",
+  "input": [
+    1,
+    1024
+  ],
+  "output": [
+    1,
+    360
+  ],
+  "fp32_sha256": "e2ae4b3d379ce27739f2f76f95555568523a20865c6a5abc6c6be58c0fbc3e67",
+  "fp16_sha256": "5f861cc7a12a1e1db125d088eaac30150ed7782697402927646bb61e79ba8295",
+  "fp32_max_abs_error": 3.2782554626464844e-07,
+  "fp16_max_abs_error": 0.0003714263439178467
+}

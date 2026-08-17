@@ -11,3 +11,6 @@
 /captures
 .externalNativeBuild
 .cxx
+/tools/crepe/.venv/
+/tools/crepe/input/
+/tools/crepe/output/
