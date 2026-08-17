@@ -52,7 +52,7 @@ fun ChromaticScreen(
         Spacer(Modifier.height(8.dp))
         TemperamentRow(selected = settings.temperament, onSelect = onTemperamentChange)
 
-        Spacer(Modifier.height(4.dp))
+        Spacer(Modifier.height(10.dp))
         Readout(
             noteName = state.noteName,
             octave = state.octave,
