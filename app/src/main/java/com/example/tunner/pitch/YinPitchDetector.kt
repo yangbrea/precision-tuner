@@ -25,6 +25,81 @@ class YinPitchDetector(
     private val maxTau: Int = 2048,
 ) : PitchDetector {
 
+    /** Returns several genuine YIN minima for probabilistic cross-frame tracking. */
+    fun detectCandidates(
+        buffer: ShortArray,
+        sampleRate: Int,
+        maxCandidates: Int = 8,
+    ): List<PitchCandidate> {
+        if (buffer.size < 4 || maxCandidates <= 0) return emptyList()
+        val x = DoubleArray(buffer.size)
+        var sumSq = 0.0
+        for (i in buffer.indices) {
+            val value = buffer[i] / 32768.0
+            x[i] = value
+            sumSq += value * value
+        }
+        if (sqrt(sumSq / buffer.size) < SILENCE_RMS) return emptyList()
+
+        val tauMax = minOf(maxTau, buffer.size / 2)
+        if (tauMax < 2) return emptyList()
+        val difference = DoubleArray(tauMax + 1)
+        for (tau in 1..tauMax) {
+            var sum = 0.0
+            var index = 0
+            val comparisonLength = buffer.size - tau
+            while (index < comparisonLength) {
+                val delta = x[index] - x[index + tau]
+                sum += delta * delta
+                index++
+            }
+            difference[tau] = sum
+        }
+        val cmndf = DoubleArray(tauMax + 1)
+        cmndf[0] = 1.0
+        var running = 0.0
+        for (tau in 1..tauMax) {
+            running += difference[tau]
+            cmndf[tau] = if (running > 0.0) difference[tau] * tau / running else 1.0
+        }
+
+        val minTau = maxOf(2, (sampleRate / MAX_CANDIDATE_FREQUENCY).toInt())
+        val minima = buildList {
+            for (tau in minTau until tauMax) {
+                if (cmndf[tau] <= MAX_FALLBACK_CMNDF &&
+                    cmndf[tau] <= cmndf[tau - 1] && cmndf[tau] <= cmndf[tau + 1]
+                ) add(tau)
+            }
+        }
+        val preferredTau = minima.firstOrNull { cmndf[it] < threshold }
+        return minima
+            .mapNotNull { tau ->
+                val refinedTau = parabolicInterpolation(cmndf, tau)
+                val frequency = sampleRate / refinedTau
+                if (frequency < MIN_FREQUENCY || frequency > MAX_CANDIDATE_FREQUENCY) null else {
+                    val periodicity = (1.0 - cmndf[tau]).coerceIn(0.0, 1.0)
+                    // A soft version of pYIN's threshold distribution: weak
+                    // minima remain available, but strong periodic minima have
+                    // substantially more emission probability.
+                    val probability = periodicity * periodicity * periodicity
+                    tau to PitchCandidate(frequency, periodicity, 0.0, probability, periodicity)
+                }
+            }
+            .sortedWith(
+                compareByDescending<Pair<Int, PitchCandidate>> { it.first == preferredTau }
+                    .thenByDescending { it.second.probability }
+                    .thenByDescending { it.second.frequency }
+            )
+            .map { it.second }
+            .fold(mutableListOf<PitchCandidate>()) { kept, candidate ->
+                if (kept.none { centsDistance(it.frequency, candidate.frequency) < CANDIDATE_NMS_CENTS }) {
+                    kept += candidate
+                }
+                kept
+            }
+            .take(maxCandidates)
+    }
+
     override fun detect(buffer: ShortArray, sampleRate: Int): Pitch? =
         detectInternal(buffer, sampleRate, searchRange = null)
 
@@ -72,9 +147,9 @@ class YinPitchDetector(
         val d = DoubleArray(computeUpTo + 1)
         for (tau in 1..computeUpTo) {
             var sum = 0.0
-            val limit = n - tau
+            val comparisonLength = n - tau
             var j = 0
-            while (j < limit) {
+            while (j < comparisonLength) {
                 val diff = x[j] - x[j + tau]
                 sum += diff * diff
                 j++
@@ -153,10 +228,15 @@ class YinPitchDetector(
         return tau + 0.5 * (s0 - s2) / denominator
     }
 
+    private fun centsDistance(a: Double, b: Double): Double =
+        abs(1200.0 * kotlin.math.ln(a / b) / kotlin.math.ln(2.0))
+
     private companion object {
         const val SILENCE_RMS = 1e-4          // ~ -80 dBFS gate
         const val MAX_FALLBACK_CMNDF = 0.6    // accept confidence >= 0.4 (reject noise)
         const val MIN_FREQUENCY = 20.0        // Hz
         const val LOCK_FRACTION = 0.06        // ≈ ±100 cents for string lock
+        const val MAX_CANDIDATE_FREQUENCY = 2500.0
+        const val CANDIDATE_NMS_CENTS = 35.0
     }
 }

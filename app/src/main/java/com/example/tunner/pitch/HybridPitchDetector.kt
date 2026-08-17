@@ -28,40 +28,79 @@ class HybridPitchDetector(
 
     override fun detect(buffer: ShortArray, sampleRate: Int): Pitch? {
         val n = min(fftSize, buffer.size)
-        if (n < 64) {
-            lastSpectrum = null
-            return null
-        }
-
-        val (candidates, spectrum) = coarseCandidates(buffer, sampleRate, n)
+        if (n < 64) return null
+        val (coarse, spectrum) = coarseCandidates(buffer, sampleRate, n)
         lastSpectrum = spectrum
-
-        // Evaluate the dominant FFT peak and its possible 1/2 and 1/3
-        // fundamentals independently. YIN periodicity is the primary score;
-        // spectral prominence is only supporting evidence. Among effectively
-        // tied periodic candidates, prefer the shortest real period (highest
-        // frequency), preventing a second YIN minimum from causing a low-octave
-        // result.
-        val evaluated = candidates.mapNotNull { candidate ->
+        val evaluated = coarse.mapNotNull { candidate ->
             yin.detectGuided(buffer, sampleRate, candidate.frequency, CANDIDATE_SEARCH_FRACTION)
                 ?.let { pitch ->
-                    val confidence = (pitch.confidence * 0.88 + candidate.spectralQuality * 0.12)
-                        .coerceIn(0.0, 1.0)
-                    Pitch(pitch.frequency, confidence)
+                    Pitch(
+                        pitch.frequency,
+                        (pitch.confidence * 0.88 + candidate.spectralQuality * 0.12).coerceIn(0.0, 1.0),
+                    )
                 }
         }
         val bestConfidence = evaluated.maxOfOrNull { it.confidence }
         if (bestConfidence != null && bestConfidence >= GUIDED_CONFIDENCE_FLOOR) {
-            return evaluated
-                .filter { it.confidence >= bestConfidence - CANDIDATE_TIE_MARGIN }
+            return evaluated.filter { it.confidence >= bestConfidence - SINGLE_FRAME_TIE_MARGIN }
                 .maxByOrNull { it.frequency }
         }
         return yin.detect(buffer, sampleRate)
     }
 
+    fun detectCandidates(
+        buffer: ShortArray,
+        sampleRate: Int,
+        maxCandidates: Int = 5,
+    ): List<PitchCandidate> {
+        val n = min(fftSize, buffer.size)
+        if (n < 64) {
+            lastSpectrum = null
+            return emptyList()
+        }
+
+        val (coarse, spectrum) = coarseCandidates(buffer, sampleRate, n)
+        lastSpectrum = spectrum
+        val guidedCandidates = coarse.mapNotNull { coarseCandidate ->
+            yin.detectGuided(buffer, sampleRate, coarseCandidate.frequency, CANDIDATE_SEARCH_FRACTION)
+                ?.let { pitch ->
+                    PitchCandidate(
+                        frequency = pitch.frequency,
+                        periodicity = pitch.confidence,
+                        spectralQuality = coarseCandidate.spectralQuality,
+                        probability = pitch.confidence * pitch.confidence * pitch.confidence,
+                        voicedProbability = pitch.confidence,
+                    )
+                }
+        }
+        return (guidedCandidates + yin.detectCandidates(buffer, sampleRate, maxCandidates = maxCandidates * 2))
+            .map { candidate ->
+                val spectralQuality = coarse.maxOfOrNull { coarseCandidate ->
+                    val distance = centsDistance(candidate.frequency, coarseCandidate.frequency)
+                    coarseCandidate.spectralQuality * kotlin.math.exp(-distance / SPECTRAL_MATCH_CENTS)
+                } ?: 0.0
+                candidate.copy(
+                    spectralQuality = spectralQuality,
+                    probability = (candidate.probability * 0.82 +
+                        candidate.periodicity * spectralQuality * 0.18).coerceIn(0.0, 1.0),
+                    voicedProbability = (candidate.periodicity * 0.9 + spectralQuality * 0.1)
+                        .coerceIn(0.0, 1.0),
+                )
+            }
+            .sortedByDescending { it.probability }
+            .fold(mutableListOf<PitchCandidate>()) { kept, candidate ->
+                if (kept.none { centsDistance(it.frequency, candidate.frequency) < 25.0 }) kept += candidate
+                kept
+            }
+            .take(maxCandidates)
+    }
+
     /** String-locked detection: refine YIN directly around [targetFrequency]. */
     fun detectLocked(buffer: ShortArray, sampleRate: Int, targetFrequency: Double): Pitch? =
         yin.detectLocked(buffer, sampleRate, targetFrequency)
+
+    private fun centsDistance(a: Double, b: Double): Double =
+        kotlin.math.abs(1200.0 * kotlin.math.ln(a / b) / kotlin.math.ln(2.0))
 
     private data class CoarseCandidate(val frequency: Double, val spectralQuality: Double)
 
@@ -117,7 +156,8 @@ class HybridPitchDetector(
         const val MAX_COARSE_HZ = 2500.0
         const val PEAK_FLOOR = 1.0 // reject silence (a full-scale tone peaks ~500)
         const val GUIDED_CONFIDENCE_FLOOR = 0.5 // below this, use full-range YIN
+        const val SPECTRAL_MATCH_CENTS = 240.0
+        const val SINGLE_FRAME_TIE_MARGIN = 0.08
         const val CANDIDATE_SEARCH_FRACTION = 0.12
-        const val CANDIDATE_TIE_MARGIN = 0.08
     }
 }

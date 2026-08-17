@@ -11,6 +11,15 @@ data class Pitch(
     val confidence: Double,
 )
 
+/** One frame-level F0 hypothesis used by the probabilistic tracker. */
+data class PitchCandidate(
+    val frequency: Double,
+    val periodicity: Double,
+    val spectralQuality: Double,
+    val probability: Double,
+    val voicedProbability: Double,
+)
+
 /**
  * Detects the fundamental frequency of a monophonic audio buffer.
  */

@@ -11,8 +11,10 @@ import com.example.tunner.audio.ReferenceToneEngine
 import com.example.tunner.audio.downsampleWaveform
 import com.example.tunner.pitch.HybridPitchDetector
 import com.example.tunner.pitch.NoiseFloorEstimator
+import com.example.tunner.pitch.OnlinePitchTracker
 import com.example.tunner.pitch.Pitch
-import com.example.tunner.pitch.PitchStabilizer
+import com.example.tunner.pitch.PitchCandidate
+import com.example.tunner.pitch.RmsOnsetDetector
 import com.example.tunner.settings.AccentColor
 import com.example.tunner.settings.AppSettings
 import com.example.tunner.settings.Sensitivity
@@ -60,7 +62,8 @@ class TunerViewModel(application: Application) : AndroidViewModel(application) {
     private var collectJob: Job? = null
 
     private val noiseEstimator = NoiseFloorEstimator()
-    private val pitchStabilizer = PitchStabilizer()
+    private val pitchTracker = OnlinePitchTracker(lagFrames = TRACKER_LAG_FRAMES)
+    private val onsetDetector = RmsOnsetDetector()
 
     // Frame buffers (window is the filtered sliding frame; hop is the raw chunk
     // read each cycle and filtered before being appended).
@@ -71,9 +74,6 @@ class TunerViewModel(application: Application) : AndroidViewModel(application) {
     // displayed note is dropped (≈1.0s at 21.5 fps).
     private var missedFrames = 0
     private var frameCount = 0L
-    private var smoothingPhase: DetectionPhase? = null
-    private var outOfRangeFrames = 0
-    private var outOfRangeFrequency: Double? = null
 
     /** Called by the UI after the RECORD_AUDIO permission result is known. */
     fun onPermissionResult(granted: Boolean) {
@@ -108,7 +108,7 @@ class TunerViewModel(application: Application) : AndroidViewModel(application) {
 
     fun updateSensitivity(sensitivity: Sensitivity) {
         settingsRepository.setSensitivity(sensitivity)
-        pitchStabilizer.configureWindow(sensitivity.windowSize)
+        pitchTracker.reset()
     }
 
     fun updateFilterStrength(strength: Float) = settingsRepository.setFilterStrength(strength)
@@ -235,6 +235,7 @@ class TunerViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private fun processWindow() {
+        val startedNanos = System.nanoTime()
         val s = settings.value
         val mode = _state.value.mode
         val tuning = resolveTuning(s.instrumentId, s.tuningId)
@@ -251,9 +252,12 @@ class TunerViewModel(application: Application) : AndroidViewModel(application) {
         val rms = noiseEstimator.rms(window)
         if (!noiseEstimator.shouldAnalyze(rms, signalToNoiseRatio(s.sensitivity))) {
             noiseEstimator.observeRejected(rms)
-            rejectFrame(lockedString, waveform, emptyList(), rms, "noise_gate")
+            pitchTracker.submit(emptyList(), lockedString?.frequency)
+            rejectFrame(lockedString, waveform, emptyList(), rms, "noise_gate", 0, false, startedNanos)
             return
         }
+
+        val onset = onsetDetector.observe(rms, noiseEstimator.noiseFloor)
 
         // In manual mode the target-guided detector runs independently of the
         // broad estimate. This is the key guard against E3 being rejected just
@@ -261,76 +265,55 @@ class TunerViewModel(application: Application) : AndroidViewModel(application) {
         val lockedPitch = lockedString?.let {
             detector.detectLocked(window, SAMPLE_RATE, it.frequency)
         }
-        val broadPitch = detector.detect(window, SAMPLE_RATE)
+        val broadCandidates = detector.detectCandidates(window, SAMPLE_RATE)
         val spectrum = detector.lastSpectrum?.toList() ?: emptyList()
-        val broadAccepted = broadPitch != null &&
-            broadPitch.confidence >= s.sensitivity.confidence
         val lockedAccepted = lockedPitch != null &&
             lockedPitch.confidence >= s.sensitivity.confidence &&
             abs(lockedString.centsFrom(lockedPitch.frequency)) <= MANUAL_LOCK_CENTS
-        val broadNearTarget = broadAccepted && lockedString != null &&
-            abs(lockedString.centsFrom(broadPitch!!.frequency)) <= MANUAL_LOCK_CENTS
-        val lockedPreferred = lockedAccepted && (
-            !broadAccepted || broadNearTarget ||
-                lockedPitch!!.confidence >= broadPitch!!.confidence - LOCKED_CONFIDENCE_MARGIN
-        )
 
-        if (!broadAccepted && !lockedPreferred) {
-            noiseEstimator.observeRejected(rms)
-            rejectFrame(lockedString, waveform, spectrum, rms, "periodicity")
-            return
-        }
-
-        var phase = DetectionPhase.TRACKING
-        val pitch: Pitch
-        if (lockedString != null && lockedPreferred) {
-            pitch = lockedPitch!!
-            clearOutOfRangeConfirmation()
-        } else if (lockedString != null && broadAccepted) {
-            val broad = broadPitch!!
-            if (abs(lockedString.centsFrom(broad.frequency)) <= MANUAL_LOCK_CENTS) {
-                pitch = broad
-                clearOutOfRangeConfirmation()
-            } else {
-                if (!confirmOutOfRange(broad.frequency)) {
-                    _state.update { it.copy(spectrum = spectrum, waveform = waveform) }
-                    logFrame(broad.frequency, broad.confidence, false, rms, "confirm_out_of_range")
-                    return
-                }
-                phase = DetectionPhase.OUT_OF_RANGE
-                pitch = broad
+        val candidates = buildList {
+            addAll(broadCandidates.filter { it.voicedProbability >= s.sensitivity.confidence })
+            if (lockedAccepted) {
+                val confidence = lockedPitch!!.confidence
+                add(PitchCandidate(
+                    frequency = lockedPitch.frequency,
+                    periodicity = confidence,
+                    spectralQuality = 1.0,
+                    probability = confidence * confidence * confidence,
+                    voicedProbability = confidence,
+                ))
             }
-        } else {
-            pitch = broadPitch!!
-            clearOutOfRangeConfirmation()
+        }.sortedByDescending { it.probability }.fold(mutableListOf<PitchCandidate>()) { kept, candidate ->
+            if (kept.none { candidateCentsDistance(it.frequency, candidate.frequency) < 25.0 }) kept += candidate
+            kept
+        }.take(MAX_TRACKER_CANDIDATES)
+
+        if (candidates.isEmpty()) {
+            noiseEstimator.observeRejected(rms)
+            pitchTracker.submit(emptyList(), lockedString?.frequency, onset)
+            rejectFrame(lockedString, waveform, spectrum, rms, "periodicity", 0, onset, startedNanos)
+            return
         }
 
         missedFrames = 0
-        pitchStabilizer.configureWindow(s.sensitivity.windowSize)
-        val phaseChanged = smoothingPhase != phase
-        if (phaseChanged) {
-            pitchStabilizer.reset()
-            if (smoothingPhase != null) {
-                _state.update { it.copy(
-                    detectedFrequency = null,
-                    cents = null,
-                    confidence = 0.0,
-                    detectionPhase = DetectionPhase.WAITING,
-                    observedNoteName = null,
-                    observedOctave = null,
-                    spectrum = spectrum, waveform = waveform,
-                ) }
-            }
-            smoothingPhase = phase
-        }
-        val medianFreq = pitchStabilizer.submit(
-            pitch.frequency,
-            transitionConfirmed = phaseChanged && (lockedPreferred || phase == DetectionPhase.OUT_OF_RANGE),
-        )
-        if (medianFreq == null) {
+        val tracked = pitchTracker.submit(candidates, lockedString?.frequency, onset)
+        if (tracked == null) {
             _state.update { it.copy(spectrum = spectrum, waveform = waveform) }
             return
         }
+        val pitch = tracked.pitch
+        if (pitch == null || pitch.confidence < s.sensitivity.confidence) {
+            noiseEstimator.observeRejected(rms)
+            rejectFrame(
+                lockedString, waveform, spectrum, rms, "viterbi_unvoiced",
+                candidates.size, onset, startedNanos,
+            )
+            return
+        }
+        val medianFreq = pitch.frequency
+        val phase = if (lockedString != null &&
+            abs(lockedString.centsFrom(medianFreq)) > MANUAL_LOCK_CENTS
+        ) DetectionPhase.OUT_OF_RANGE else DetectionPhase.TRACKING
         val a4 = _state.value.referenceA4
         val observedNote = NoteMapper.noteFromFrequency(medianFreq, a4)
 
@@ -356,7 +339,10 @@ class TunerViewModel(application: Application) : AndroidViewModel(application) {
             cents = NoteMapper.cents(medianFreq, a4)
         }
 
-        logFrame(pitch.frequency, pitch.confidence, true, rms, if (lockedPreferred) "locked" else "broad")
+        logFrame(
+            pitch.frequency, pitch.confidence, true, rms, "viterbi",
+            candidates.size, onset, startedNanos,
+        )
 
         // Detect the "not in tune -> in tune" rising edge and fire the cue.
         val nowInTune = phase == DetectionPhase.TRACKING &&
@@ -394,12 +380,13 @@ class TunerViewModel(application: Application) : AndroidViewModel(application) {
         spectrum: List<Float>,
         rms: Double,
         reason: String,
+        candidateCount: Int,
+        onset: Boolean,
+        startedNanos: Long,
     ) {
         missedFrames++
         if (missedFrames >= HOLD_FRAMES) {
-            pitchStabilizer.reset()
-            smoothingPhase = null
-            clearOutOfRangeConfirmation()
+            pitchTracker.reset()
             missedFrames = 0
             _state.update { it.copy(
                 detectedFrequency = null,
@@ -418,22 +405,11 @@ class TunerViewModel(application: Application) : AndroidViewModel(application) {
         } else {
             _state.update { it.copy(spectrum = spectrum, waveform = waveform) }
         }
-        logFrame(null, 0.0, false, rms, reason)
+        logFrame(null, 0.0, false, rms, reason, candidateCount, onset, startedNanos)
     }
 
-    private fun confirmOutOfRange(frequency: Double): Boolean {
-        val previous = outOfRangeFrequency
-        val consistent = previous != null &&
-            abs(1200.0 * ln(frequency / previous) / ln(2.0)) <= OUT_OF_RANGE_CLUSTER_CENTS
-        outOfRangeFrames = if (consistent) outOfRangeFrames + 1 else 1
-        outOfRangeFrequency = frequency
-        return outOfRangeFrames >= OUT_OF_RANGE_CONFIRM_FRAMES
-    }
-
-    private fun clearOutOfRangeConfirmation() {
-        outOfRangeFrames = 0
-        outOfRangeFrequency = null
-    }
+    private fun candidateCentsDistance(a: Double, b: Double): Double =
+        abs(1200.0 * ln(a / b) / ln(2.0))
 
     private fun signalToNoiseRatio(sensitivity: Sensitivity): Double = when (sensitivity) {
         Sensitivity.HIGH -> 2.0
@@ -447,6 +423,9 @@ class TunerViewModel(application: Application) : AndroidViewModel(application) {
         accepted: Boolean,
         rms: Double,
         reason: String,
+        candidateCount: Int,
+        onset: Boolean,
+        startedNanos: Long,
     ) {
         frameCount++
         if (frameCount % LOG_EVERY != 0L) return
@@ -454,15 +433,16 @@ class TunerViewModel(application: Application) : AndroidViewModel(application) {
             TAG,
             "f=${freq ?: "null"} conf=${"%.2f".format(confidence)} " +
                 "rms=${"%.5f".format(rms)} noise=${"%.5f".format(noiseEstimator.noiseFloor)} " +
+                "candidates=$candidateCount onset=$onset " +
+                "processingMs=${"%.1f".format((System.nanoTime() - startedNanos) / 1_000_000.0)} " +
                 "accepted=$accepted reason=$reason missed=$missedFrames",
         )
     }
 
     private fun resetDetection() {
-        pitchStabilizer.reset()
+        pitchTracker.reset()
+        onsetDetector.reset()
         noiseEstimator.reset()
-        clearOutOfRangeConfirmation()
-        smoothingPhase = null
         missedFrames = 0
         val currentState = _state.value
         val currentSettings = settings.value
@@ -501,9 +481,8 @@ class TunerViewModel(application: Application) : AndroidViewModel(application) {
         const val HOP = 2048          // ~46 ms update interval (50% overlap)
         const val HOLD_FRAMES = 22    // ≈1.0s hold before dropping the note
         const val MANUAL_LOCK_CENTS = 100.0
-        const val LOCKED_CONFIDENCE_MARGIN = 0.05
-        const val OUT_OF_RANGE_CONFIRM_FRAMES = 3
-        const val OUT_OF_RANGE_CLUSTER_CENTS = 80.0
+        const val TRACKER_LAG_FRAMES = 3
+        const val MAX_TRACKER_CANDIDATES = 5
         const val LOG_EVERY = 10L     // throttle debug logging
     }
 }
