@@ -18,6 +18,9 @@ import com.example.tunner.pitch.OnlinePitchTracker
 import com.example.tunner.pitch.Pitch
 import com.example.tunner.pitch.PitchCandidate
 import com.example.tunner.pitch.RmsOnsetDetector
+import com.example.tunner.pitch.TinyCrepeResult
+import com.example.tunner.pitch.TinyCrepeShadow
+import com.example.tunner.pitch.TinyCrepeShadowMetrics
 import com.example.tunner.settings.AccentColor
 import com.example.tunner.settings.AppSettings
 import com.example.tunner.settings.Sensitivity
@@ -70,6 +73,9 @@ class TunerViewModel(application: Application) : AndroidViewModel(application) {
     private val automaticStringTracker = AutomaticStringTracker(releaseFrames = HOLD_FRAMES)
     private var automaticStringState = AutomaticStringState(null, null, 0, null, "reset")
     private val inTuneCueGate = InTuneCueGate()
+    private val tinyCrepeShadow = TinyCrepeShadow.create(application)
+    private val tinyCrepeMetrics = TinyCrepeShadowMetrics()
+    private var pendingTinyCrepeResult: TinyCrepeResult? = null
 
     // Frame buffers (window is the filtered sliding frame; hop is the raw chunk
     // read each cycle and filtered before being appended).
@@ -246,6 +252,7 @@ class TunerViewModel(application: Application) : AndroidViewModel(application) {
         val mode = _state.value.mode
         val tuning = resolveTuning(s.instrumentId, s.tuningId)
         val waveform = downsampleWaveform(window)
+        pendingTinyCrepeResult = tinyCrepeShadow?.infer(window, SAMPLE_RATE)
 
         // String lock: when a string is manually selected, constrain detection
         // to that string's pitch (±~100 cents) for robustness against harmonics
@@ -335,6 +342,7 @@ class TunerViewModel(application: Application) : AndroidViewModel(application) {
         val tracked = pitchTracker.submit(candidates, lockedString?.frequency, onset)
         if (tracked == null) {
             inTuneCueGate.observeInvalid()
+            recordTinyCrepeFrame(null)
             _state.update { it.copy(spectrum = spectrum, waveform = waveform) }
             return
         }
@@ -469,6 +477,8 @@ class TunerViewModel(application: Application) : AndroidViewModel(application) {
         onset: Boolean,
         startedNanos: Long,
     ) {
+        val tinyCrepe = pendingTinyCrepeResult
+        val tinyMetrics = recordTinyCrepeFrame(freq)
         frameCount++
         if (frameCount % LOG_EVERY != 0L) return
         Log.d(
@@ -485,9 +495,25 @@ class TunerViewModel(application: Application) : AndroidViewModel(application) {
                 "autoReason=${automaticStringState.reason} " +
                 "cueArmed=${inTuneCueGate.state.armed} " +
                 "cueCenter=${inTuneCueGate.state.centerFrames} " +
-                "cueFar=${inTuneCueGate.state.farFrames}",
+                "cueFar=${inTuneCueGate.state.farFrames} " +
+                "crepeF=${tinyCrepe?.frequency?.let { "%.2f".format(it) }} " +
+                "crepeConf=${tinyCrepe?.confidence?.let { "%.2f".format(it) }} " +
+                "crepeMs=${tinyCrepe?.inferenceMs?.let { "%.1f".format(it) }} " +
+                "crepeP50=${tinyMetrics?.p50Ms?.let { "%.1f".format(it) }} " +
+                "crepeP95=${tinyMetrics?.p95Ms?.let { "%.1f".format(it) }} " +
+                "crepeMax=${tinyMetrics?.maxMs?.let { "%.1f".format(it) }} " +
+                "crepeAgree=${tinyMetrics?.agreement} " +
+                "crepeOctave=${tinyMetrics?.octaveConflict} " +
+                "crepeUnvoiced=${tinyMetrics?.neuralUnvoiced} dspUnvoiced=${tinyMetrics?.dspUnvoiced}",
         )
     }
+
+    private fun recordTinyCrepeFrame(dspFrequency: Double?) =
+        if (tinyCrepeShadow == null) null else {
+            tinyCrepeMetrics.observe(pendingTinyCrepeResult, dspFrequency).also {
+                pendingTinyCrepeResult = null
+            }
+        }
 
     private fun resetDetection() {
         pitchTracker.reset()
@@ -523,6 +549,7 @@ class TunerViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     override fun onCleared() {
+        tinyCrepeShadow?.close()
         stopListening()
         super.onCleared()
     }

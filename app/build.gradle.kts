@@ -57,6 +57,20 @@ android {
 
     buildFeatures {
         compose = true
+        buildConfig = true
+    }
+
+    val tinyCrepeEnabled = providers.gradleProperty("tinyCrepeEnabled")
+        .map(String::toBoolean)
+        .orElse(false)
+    defaultConfig {
+        buildConfigField("boolean", "TINY_CREPE_ENABLED", tinyCrepeEnabled.get().toString())
+        if (tinyCrepeEnabled.get()) {
+            ndk { abiFilters += "arm64-v8a" }
+        }
+    }
+    if (tinyCrepeEnabled.get()) {
+        sourceSets.getByName("main").assets.srcDir("src/tinyCrepe/assets")
     }
 }
 
@@ -76,4 +90,9 @@ dependencies {
 
     testImplementation(libs.junit)
     debugImplementation(libs.androidx.ui.tooling)
+    compileOnly(libs.litert.api)
+    testImplementation(libs.litert.api)
+    if (providers.gradleProperty("tinyCrepeEnabled").map(String::toBoolean).orElse(false).get()) {
+        runtimeOnly(libs.litert)
+    }
 }

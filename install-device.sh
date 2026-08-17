@@ -4,7 +4,20 @@ set -euo pipefail
 project_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 apk_path="$project_dir/app/build/outputs/apk/debug/app-debug.apk"
 package_name="com.example.tunner"
-requested_serial="${1:-}"
+requested_serial=""
+tiny_crepe_enabled=false
+for argument in "$@"; do
+    case "$argument" in
+        --tiny-crepe) tiny_crepe_enabled=true ;;
+        *)
+            if [[ -n "$requested_serial" ]]; then
+                echo "错误：无法识别参数 $argument" >&2
+                exit 1
+            fi
+            requested_serial="$argument"
+            ;;
+    esac
+done
 
 if ! command -v adb >/dev/null 2>&1; then
     echo "错误：未找到 adb，请先安装 Android platform-tools 或加入 PATH。" >&2
@@ -37,8 +50,14 @@ if [[ "$device_state" != "device" ]]; then
     exit 1
 fi
 
-echo "构建 Debug APK..."
-"$project_dir/gradlew" -p "$project_dir" assembleDebug
+gradle_args=(assembleDebug)
+if [[ "$tiny_crepe_enabled" == true ]]; then
+    gradle_args=(-PtinyCrepeEnabled=true assembleDebug)
+fi
+
+echo "构建 Debug APK（Tiny CREPE shadow=$tiny_crepe_enabled）..."
+GRADLE_USER_HOME="$project_dir/.gradle-home" \
+    "$project_dir/gradlew" -p "$project_dir" "${gradle_args[@]}"
 
 echo "安装到设备 $device_serial..."
 adb -s "$device_serial" install -r -g "$apk_path"
