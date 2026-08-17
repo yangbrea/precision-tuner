@@ -33,6 +33,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.tunner.settings.AccentColor
 import com.example.tunner.settings.AppSettings
+import com.example.tunner.BuildConfig
+import com.example.tunner.settings.DetectionEngine
 import com.example.tunner.settings.Sensitivity
 import com.example.tunner.settings.ThemeMode
 import com.example.tunner.settings.VisualMode
@@ -46,6 +48,7 @@ fun SettingsScreen(
     onFilterChange: (Float) -> Unit,
     onThemeModeChange: (ThemeMode) -> Unit,
     onVisualModeChange: (VisualMode) -> Unit,
+    onDetectionEngineChange: (DetectionEngine) -> Unit,
     onManageTunings: () -> Unit,
 ) {
     Column(
@@ -77,10 +80,56 @@ fun SettingsScreen(
         SensitivityRow(selected = settings.sensitivity, onSelect = onSensitivityChange)
         Hint("高 = 响应快、指针较灵敏;低 = 更稳定、略慢")
 
+        if (BuildConfig.DEBUG && BuildConfig.TINY_CREPE_ENABLED) {
+            Spacer(Modifier.height(28.dp))
+            SectionTitle("实验检测引擎")
+            DetectionEngineRow(settings.detectionEngine, onDetectionEngineChange)
+            Hint("仅用于A/B测试;CREPE旁路不影响显示,主检测会使用模型结果")
+        }
+
         Spacer(Modifier.height(28.dp))
         SectionTitle("滤波强度")
         FilterSlider(value = settings.filterStrength, onChange = onFilterChange)
         Hint("强度越高,越能滤除高频噪声与泛音,低音弦更稳定")
+    }
+}
+
+@Composable
+private fun DetectionEngineRow(
+    selected: DetectionEngine,
+    onSelect: (DetectionEngine) -> Unit,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        DetectionEngine.entries.forEach { engine ->
+            val active = engine == selected
+            val accent = MaterialTheme.colorScheme.primary
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .background(
+                        if (active) accent.copy(alpha = 0.2f) else MaterialTheme.colorScheme.surfaceVariant,
+                        RoundedCornerShape(12.dp),
+                    )
+                    .border(
+                        1.5.dp,
+                        if (active) accent else MaterialTheme.colorScheme.outlineVariant,
+                        RoundedCornerShape(12.dp),
+                    )
+                    .clickable { onSelect(engine) }
+                    .padding(horizontal = 4.dp, vertical = 12.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    engine.label,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = if (active) accent else MaterialTheme.colorScheme.onBackground,
+                )
+            }
+        }
     }
 }
 

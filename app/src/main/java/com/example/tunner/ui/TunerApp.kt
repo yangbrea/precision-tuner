@@ -150,6 +150,7 @@ fun TunerApp(viewModel: TunerViewModel, metronomeViewModel: MetronomeViewModel) 
                     onFilterChange = viewModel::updateFilterStrength,
                     onThemeModeChange = viewModel::updateThemeMode,
                     onVisualModeChange = viewModel::updateVisualMode,
+                    onDetectionEngineChange = viewModel::updateDetectionEngine,
                     onManageTunings = { showPresetManager = true },
                 )
                 state.mode == TunerMode.METRONOME -> MetronomeScreen(

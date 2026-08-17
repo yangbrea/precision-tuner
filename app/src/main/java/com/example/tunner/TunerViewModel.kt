@@ -23,6 +23,7 @@ import com.example.tunner.pitch.TinyCrepeShadow
 import com.example.tunner.pitch.TinyCrepeShadowMetrics
 import com.example.tunner.settings.AccentColor
 import com.example.tunner.settings.AppSettings
+import com.example.tunner.settings.DetectionEngine
 import com.example.tunner.settings.Sensitivity
 import com.example.tunner.settings.SettingsRepository
 import com.example.tunner.settings.ThemeMode
@@ -76,6 +77,8 @@ class TunerViewModel(application: Application) : AndroidViewModel(application) {
     private val tinyCrepeShadow = TinyCrepeShadow.create(application)
     private val tinyCrepeMetrics = TinyCrepeShadowMetrics()
     private var pendingTinyCrepeResult: TinyCrepeResult? = null
+    private var pendingTinyCrepeRan = false
+    private var activeDetectionEngine = DetectionEngine.PYIN_LITE
 
     // Frame buffers (window is the filtered sliding frame; hop is the raw chunk
     // read each cycle and filtered before being appended).
@@ -128,6 +131,11 @@ class TunerViewModel(application: Application) : AndroidViewModel(application) {
     fun updateThemeMode(mode: ThemeMode) = settingsRepository.setThemeMode(mode)
 
     fun updateVisualMode(mode: VisualMode) = settingsRepository.setVisualMode(mode)
+
+    fun updateDetectionEngine(engine: DetectionEngine) {
+        settingsRepository.setDetectionEngine(engine)
+        resetDetection()
+    }
 
     fun updateInstrument(instrumentId: String) {
         stopReferenceTone()
@@ -249,10 +257,17 @@ class TunerViewModel(application: Application) : AndroidViewModel(application) {
     private fun processWindow() {
         val startedNanos = System.nanoTime()
         val s = settings.value
+        val detectionEngine = effectiveDetectionEngine(s.detectionEngine)
+        activeDetectionEngine = detectionEngine
         val mode = _state.value.mode
         val tuning = resolveTuning(s.instrumentId, s.tuningId)
         val waveform = downsampleWaveform(window)
-        pendingTinyCrepeResult = tinyCrepeShadow?.infer(window, SAMPLE_RATE)
+        pendingTinyCrepeRan = detectionEngine != DetectionEngine.PYIN_LITE && tinyCrepeShadow != null
+        pendingTinyCrepeResult = if (!pendingTinyCrepeRan) {
+            null
+        } else {
+            tinyCrepeShadow?.infer(window, SAMPLE_RATE)
+        }
 
         // String lock: when a string is manually selected, constrain detection
         // to that string's pitch (±~100 cents) for robustness against harmonics
@@ -289,6 +304,19 @@ class TunerViewModel(application: Application) : AndroidViewModel(application) {
             detector.detectLocked(window, SAMPLE_RATE, it.frequency)
         }
         val broadCandidates = detector.detectCandidates(window, SAMPLE_RATE)
+        val neuralCandidate = pendingTinyCrepeResult?.takeIf {
+            it.confidence >= s.sensitivity.confidence
+        }?.let {
+            PitchCandidate(
+                frequency = it.frequency,
+                periodicity = it.confidence,
+                spectralQuality = 1.0,
+                probability = it.confidence,
+                voicedProbability = it.confidence,
+            )
+        }
+        val primaryUsesNeural = detectionEngine == DetectionEngine.CREPE_PRIMARY && neuralCandidate != null
+        val engineCandidates = if (primaryUsesNeural) listOfNotNull(neuralCandidate) else broadCandidates
         val spectrum = detector.lastSpectrum?.toList() ?: emptyList()
         val lockedAccepted = lockedPitch != null &&
             lockedPitch.confidence >= s.sensitivity.confidence &&
@@ -297,7 +325,7 @@ class TunerViewModel(application: Application) : AndroidViewModel(application) {
         if (automaticMode) {
             automaticStringState = automaticStringTracker.submit(
                 tuning = tuning,
-                broadCandidates = broadCandidates,
+                broadCandidates = engineCandidates,
                 lockedAccepted = lockedAccepted,
                 onset = onset,
                 signalToNoiseRatio = rms / noiseEstimator.noiseFloor.coerceAtLeast(1e-9),
@@ -311,12 +339,12 @@ class TunerViewModel(application: Application) : AndroidViewModel(application) {
         }
 
         val candidates = buildList {
-            addAll(broadCandidates.filter { candidate ->
+            addAll(engineCandidates.filter { candidate ->
                 candidate.voicedProbability >= s.sensitivity.confidence &&
                     (manualString != null || mode != TunerMode.INSTRUMENT ||
                         lockedString?.let { abs(it.centsFrom(candidate.frequency)) <= AUTO_TARGET_CENTS } == true)
             })
-            if (acceptedLockedPitch != null) {
+            if (acceptedLockedPitch != null && !primaryUsesNeural) {
                 val confidence = acceptedLockedPitch.confidence
                 add(PitchCandidate(
                     frequency = acceptedLockedPitch.frequency,
@@ -488,6 +516,7 @@ class TunerViewModel(application: Application) : AndroidViewModel(application) {
                 "candidates=$candidateCount onset=$onset " +
                 "processingMs=${"%.1f".format((System.nanoTime() - startedNanos) / 1_000_000.0)} " +
                 "accepted=$accepted reason=$reason missed=$missedFrames " +
+                "engine=${activeDetectionEngine.name} " +
                 "autoActive=${automaticStringState.activeString?.fullNote} " +
                 "autoPending=${automaticStringState.pendingString?.fullNote} " +
                 "autoFrames=${automaticStringState.confirmationFrames} " +
@@ -509,10 +538,18 @@ class TunerViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private fun recordTinyCrepeFrame(dspFrequency: Double?) =
-        if (tinyCrepeShadow == null) null else {
+        if (!pendingTinyCrepeRan) null else {
             tinyCrepeMetrics.observe(pendingTinyCrepeResult, dspFrequency).also {
                 pendingTinyCrepeResult = null
+                pendingTinyCrepeRan = false
             }
+        }
+
+    private fun effectiveDetectionEngine(configured: DetectionEngine): DetectionEngine =
+        when {
+            tinyCrepeShadow == null -> DetectionEngine.PYIN_LITE
+            !BuildConfig.DEBUG -> DetectionEngine.CREPE_SHADOW
+            else -> configured
         }
 
     private fun resetDetection() {
@@ -522,6 +559,8 @@ class TunerViewModel(application: Application) : AndroidViewModel(application) {
         automaticStringTracker.reset()
         automaticStringState = AutomaticStringState(null, null, 0, null, "reset")
         inTuneCueGate.reset()
+        pendingTinyCrepeResult = null
+        pendingTinyCrepeRan = false
         missedFrames = 0
         val currentState = _state.value
         val currentSettings = settings.value
