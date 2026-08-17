@@ -11,7 +11,7 @@ enum class VisualMode { SPECTRUM, WAVEFORM }
 /** Debug-only pitch engine selection for Tiny CREPE A/B testing. */
 enum class DetectionEngine(val label: String) {
     PYIN_LITE("pYIN-lite"),
-    CREPE_SHADOW("CREPE旁路"),
+    CREPE_HYBRID("CREPE混合"),
     CREPE_PRIMARY("CREPE主检测"),
 }
 
@@ -22,7 +22,7 @@ data class AppSettings(
     val filterStrength: Float = 0.5f, // 0..1, 0 = off
     val themeMode: ThemeMode = ThemeMode.DARK,
     val visualMode: VisualMode = VisualMode.SPECTRUM,
-    val detectionEngine: DetectionEngine = DetectionEngine.CREPE_SHADOW,
+    val detectionEngine: DetectionEngine = DetectionEngine.CREPE_HYBRID,
 
     // Selected instrument & tuning for the instrument tuner.
     val instrumentId: String = "guitar",

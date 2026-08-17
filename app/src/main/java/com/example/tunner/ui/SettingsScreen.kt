@@ -84,7 +84,7 @@ fun SettingsScreen(
             Spacer(Modifier.height(28.dp))
             SectionTitle("实验检测引擎")
             DetectionEngineRow(settings.detectionEngine, onDetectionEngineChange)
-            Hint("仅用于A/B测试;CREPE旁路不影响显示,主检测会使用模型结果")
+            Hint("混合模式仅在整数倍冲突时由CREPE仲裁;主检测始终优先使用模型")
         }
 
         Spacer(Modifier.height(28.dp))

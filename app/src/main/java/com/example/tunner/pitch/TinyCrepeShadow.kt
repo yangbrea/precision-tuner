@@ -19,7 +19,7 @@ data class TinyCrepeResult(
     val inferenceMs: Double,
 )
 
-/** Offline Tiny CREPE inference used only for shadow comparison. */
+/** Offline Tiny CREPE inference backend used by hybrid and primary modes. */
 class TinyCrepeShadow private constructor(private val interpreter: InterpreterApi) : AutoCloseable {
     private val input = Array(1) { FloatArray(INPUT_SIZE) }
     private val output = Array(1) { FloatArray(OUTPUT_SIZE) }
@@ -61,7 +61,7 @@ class TinyCrepeShadow private constructor(private val interpreter: InterpreterAp
 
         fun create(context: Context): TinyCrepeShadow? {
             if (!BuildConfig.TINY_CREPE_ENABLED) {
-                Log.d(TAG, "Tiny CREPE shadow disabled by build flag")
+                Log.d(TAG, "Tiny CREPE model disabled by build flag")
                 return null
             }
             return runCatching {
@@ -73,10 +73,10 @@ class TinyCrepeShadow private constructor(private val interpreter: InterpreterAp
                 require(interpreter.getInputTensor(0).shape().contentEquals(intArrayOf(1, INPUT_SIZE)))
                 require(interpreter.getOutputTensor(0).shape().contentEquals(intArrayOf(1, OUTPUT_SIZE)))
                 TinyCrepeShadow(interpreter).also {
-                    Log.d(TAG, "Tiny CREPE shadow loaded: input=1024 output=360 threads=1")
+                    Log.d(TAG, "Tiny CREPE model loaded: input=1024 output=360 threads=1")
                 }
             }.onFailure {
-                Log.e(TAG, "Tiny CREPE shadow unavailable; DSP fallback remains active", it)
+                Log.e(TAG, "Tiny CREPE model unavailable; DSP fallback remains active", it)
             }.getOrNull()
         }
 

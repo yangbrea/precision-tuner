@@ -69,9 +69,12 @@ class SettingsRepository(context: Context) {
         val visual = runCatching {
             VisualMode.valueOf(prefs.getString(KEY_VISUAL, null) ?: "")
         }.getOrDefault(VisualMode.SPECTRUM)
-        val detectionEngine = runCatching {
-            DetectionEngine.valueOf(prefs.getString(KEY_DETECTION_ENGINE, null) ?: "")
-        }.getOrDefault(DetectionEngine.CREPE_SHADOW)
+        val storedEngine = prefs.getString(KEY_DETECTION_ENGINE, null)
+        val detectionEngine = if (storedEngine == "CREPE_SHADOW") {
+            DetectionEngine.CREPE_HYBRID
+        } else runCatching {
+            DetectionEngine.valueOf(storedEngine ?: "")
+        }.getOrDefault(DetectionEngine.CREPE_HYBRID)
         var instrument = prefs.getString(KEY_INSTRUMENT, null) ?: "guitar"
         var tuning = prefs.getString(KEY_TUNING, null) ?: "standard"
         // The old app used (custom, standard) for its single mutable tuning.

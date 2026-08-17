@@ -55,7 +55,7 @@ if [[ "$tiny_crepe_enabled" == true ]]; then
     gradle_args=(-PtinyCrepeEnabled=true assembleDebug)
 fi
 
-echo "构建 Debug APK（Tiny CREPE shadow=$tiny_crepe_enabled）..."
+echo "构建 Debug APK（Tiny CREPE model=$tiny_crepe_enabled）..."
 GRADLE_USER_HOME="$project_dir/.gradle-home" \
     "$project_dir/gradlew" -p "$project_dir" "${gradle_args[@]}"
 

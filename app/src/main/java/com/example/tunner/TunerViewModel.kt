@@ -12,6 +12,7 @@ import com.example.tunner.audio.downsampleWaveform
 import com.example.tunner.pitch.HybridPitchDetector
 import com.example.tunner.pitch.AutomaticStringState
 import com.example.tunner.pitch.AutomaticStringTracker
+import com.example.tunner.pitch.CrepeHybridArbitrator
 import com.example.tunner.pitch.InTuneCueGate
 import com.example.tunner.pitch.NoiseFloorEstimator
 import com.example.tunner.pitch.OnlinePitchTracker
@@ -72,6 +73,7 @@ class TunerViewModel(application: Application) : AndroidViewModel(application) {
     private val pitchTracker = OnlinePitchTracker(lagFrames = TRACKER_LAG_FRAMES)
     private val onsetDetector = RmsOnsetDetector()
     private val automaticStringTracker = AutomaticStringTracker(releaseFrames = HOLD_FRAMES)
+    private val crepeHybridArbitrator = CrepeHybridArbitrator(releaseFrames = HOLD_FRAMES)
     private var automaticStringState = AutomaticStringState(null, null, 0, null, "reset")
     private val inTuneCueGate = InTuneCueGate()
     private val tinyCrepeShadow = TinyCrepeShadow.create(application)
@@ -262,12 +264,8 @@ class TunerViewModel(application: Application) : AndroidViewModel(application) {
         val mode = _state.value.mode
         val tuning = resolveTuning(s.instrumentId, s.tuningId)
         val waveform = downsampleWaveform(window)
-        pendingTinyCrepeRan = detectionEngine != DetectionEngine.PYIN_LITE && tinyCrepeShadow != null
-        pendingTinyCrepeResult = if (!pendingTinyCrepeRan) {
-            null
-        } else {
-            tinyCrepeShadow?.infer(window, SAMPLE_RATE)
-        }
+        pendingTinyCrepeRan = false
+        pendingTinyCrepeResult = null
 
         // String lock: when a string is manually selected, constrain detection
         // to that string's pitch (±~100 cents) for robustness against harmonics
@@ -304,6 +302,16 @@ class TunerViewModel(application: Application) : AndroidViewModel(application) {
             detector.detectLocked(window, SAMPLE_RATE, it.frequency)
         }
         val broadCandidates = detector.detectCandidates(window, SAMPLE_RATE)
+        val hybridTrigger = if (
+            detectionEngine == DetectionEngine.CREPE_HYBRID && mode == TunerMode.CHROMATIC
+        ) crepeHybridArbitrator.triggerReason(broadCandidates) else null
+        val shouldRunCrepe = tinyCrepeShadow != null && (
+            detectionEngine == DetectionEngine.CREPE_PRIMARY || hybridTrigger != null
+        )
+        if (shouldRunCrepe) {
+            pendingTinyCrepeRan = true
+            pendingTinyCrepeResult = tinyCrepeShadow?.infer(window, SAMPLE_RATE)
+        }
         val neuralCandidate = pendingTinyCrepeResult?.takeIf {
             it.confidence >= s.sensitivity.confidence
         }?.let {
@@ -316,7 +324,18 @@ class TunerViewModel(application: Application) : AndroidViewModel(application) {
             )
         }
         val primaryUsesNeural = detectionEngine == DetectionEngine.CREPE_PRIMARY && neuralCandidate != null
-        val engineCandidates = if (primaryUsesNeural) listOfNotNull(neuralCandidate) else broadCandidates
+        val engineCandidates = when {
+            primaryUsesNeural -> listOfNotNull(neuralCandidate)
+            detectionEngine == DetectionEngine.CREPE_HYBRID && mode == TunerMode.CHROMATIC ->
+                crepeHybridArbitrator.arbitrate(
+                    candidates = broadCandidates,
+                    neuralFrequency = pendingTinyCrepeResult?.frequency,
+                    neuralConfidence = pendingTinyCrepeResult?.confidence ?: 0.0,
+                    minimumConfidence = s.sensitivity.confidence,
+                    triggerReason = hybridTrigger,
+                )
+            else -> broadCandidates
+        }
         val spectrum = detector.lastSpectrum?.toList() ?: emptyList()
         val lockedAccepted = lockedPitch != null &&
             lockedPitch.confidence >= s.sensitivity.confidence &&
@@ -385,6 +404,9 @@ class TunerViewModel(application: Application) : AndroidViewModel(application) {
         }
         val medianFreq = pitch.frequency
         noiseEstimator.observeVoiced(rms)
+        if (detectionEngine == DetectionEngine.CREPE_HYBRID && mode == TunerMode.CHROMATIC) {
+            crepeHybridArbitrator.observeAccepted(medianFreq)
+        }
         val phase = if (lockedString != null &&
             abs(lockedString.centsFrom(medianFreq)) > MANUAL_LOCK_CENTS
         ) DetectionPhase.OUT_OF_RANGE else DetectionPhase.TRACKING
@@ -463,6 +485,11 @@ class TunerViewModel(application: Application) : AndroidViewModel(application) {
         startedNanos: Long,
     ) {
         inTuneCueGate.observeInvalid()
+        if (activeDetectionEngine == DetectionEngine.CREPE_HYBRID &&
+            _state.value.mode == TunerMode.CHROMATIC
+        ) {
+            crepeHybridArbitrator.observeMissing()
+        }
         missedFrames++
         if (missedFrames >= HOLD_FRAMES) {
             pitchTracker.reset()
@@ -521,6 +548,11 @@ class TunerViewModel(application: Application) : AndroidViewModel(application) {
                 "processingMs=${"%.1f".format((System.nanoTime() - startedNanos) / 1_000_000.0)} " +
                 "accepted=$accepted reason=$reason missed=$missedFrames " +
                 "engine=${activeDetectionEngine.name} " +
+                "hybridTrigger=${crepeHybridArbitrator.state.triggerReason} " +
+                "hybridAnchor=${crepeHybridArbitrator.state.anchorFrequency?.let { "%.2f".format(it) }} " +
+                "hybridSupport=${crepeHybridArbitrator.state.supportedFrequency?.let { "%.2f".format(it) }} " +
+                "hybridFrames=${crepeHybridArbitrator.state.confirmationFrames} " +
+                "hybridSource=${crepeHybridArbitrator.state.decisionSource} " +
                 "autoActive=${automaticStringState.activeString?.fullNote} " +
                 "autoPending=${automaticStringState.pendingString?.fullNote} " +
                 "autoFrames=${automaticStringState.confirmationFrames} " +
@@ -552,7 +584,7 @@ class TunerViewModel(application: Application) : AndroidViewModel(application) {
     private fun effectiveDetectionEngine(configured: DetectionEngine): DetectionEngine =
         when {
             tinyCrepeShadow == null -> DetectionEngine.PYIN_LITE
-            !BuildConfig.DEBUG -> DetectionEngine.CREPE_SHADOW
+            !BuildConfig.DEBUG -> DetectionEngine.CREPE_HYBRID
             else -> configured
         }
 
@@ -561,6 +593,7 @@ class TunerViewModel(application: Application) : AndroidViewModel(application) {
         onsetDetector.reset()
         noiseEstimator.reset()
         automaticStringTracker.reset()
+        crepeHybridArbitrator.reset()
         automaticStringState = AutomaticStringState(null, null, 0, null, "reset")
         inTuneCueGate.reset()
         pendingTinyCrepeResult = null
