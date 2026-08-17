@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -93,24 +94,37 @@ fun InstrumentScreen(
         }
 
         val active = state.activeString?.let { tuning?.byNumber(it) }
-        Text(
-            text = active?.let { "第${it.number}弦 · ${it.fullNote}" } ?: "自动识别",
-            fontSize = 16.sp,
-            maxLines = 1,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-
-        // Ear-training reference is available only for an explicit string target.
+        // Status text with the ear-training reference control on the same row,
+        // so manual selection never adds a full row and the layout stays on one
+        // screen without scrolling.
         val selectedTarget = state.selectedString?.let { tuning?.byNumber(it) }
-        if (selectedTarget != null) {
-            TextButton(onClick = onToggleReferenceTone) {
-                Icon(
-                    imageVector = if (state.isReferenceTonePlaying) Icons.Filled.Stop else Icons.Filled.PlayArrow,
-                    contentDescription = if (state.isReferenceTonePlaying) "停止参考音" else "播放参考音",
-                    modifier = Modifier.size(18.dp),
-                )
-                Spacer(Modifier.width(6.dp))
-                Text(if (state.isReferenceTonePlaying) "停止参考音" else "参考音 ${selectedTarget.fullNote}")
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = active?.let { "第${it.number}弦 · ${it.fullNote}" } ?: "自动识别",
+                fontSize = 16.sp,
+                maxLines = 1,
+                modifier = Modifier.weight(1f),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            if (selectedTarget != null) {
+                TextButton(
+                    onClick = onToggleReferenceTone,
+                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
+                ) {
+                    Icon(
+                        imageVector = if (state.isReferenceTonePlaying) Icons.Filled.Stop else Icons.Filled.PlayArrow,
+                        contentDescription = if (state.isReferenceTonePlaying) "停止参考音" else "播放参考音",
+                        modifier = Modifier.size(16.dp),
+                    )
+                    Spacer(Modifier.width(4.dp))
+                    Text(
+                        text = if (state.isReferenceTonePlaying) "停止参考音" else "参考音 ${selectedTarget.fullNote}",
+                        fontSize = 13.sp,
+                    )
+                }
             }
         }
 
@@ -132,7 +146,7 @@ fun InstrumentScreen(
             style = settings.gaugeStyle,
             modifier = Modifier
                 .fillMaxWidth()
-                .height(if (settings.gaugeStyle == GaugeStyle.DIAL) 196.dp else 108.dp),
+                .height(if (settings.gaugeStyle == GaugeStyle.DIAL) 168.dp else 108.dp),
         )
 
         Spacer(Modifier.height(4.dp))
@@ -224,7 +238,7 @@ private fun StringSelector(
                     .background(background, RoundedCornerShape(12.dp))
                     .border(1.5.dp, border, RoundedCornerShape(12.dp))
                     .clickable { onSelect(if (isSelected) null else s.number) }
-                    .padding(vertical = 12.dp),
+                    .padding(vertical = 8.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
                 Text(
