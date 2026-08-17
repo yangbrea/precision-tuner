@@ -16,6 +16,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.tunner.TunerState
 import com.example.tunner.settings.AppSettings
+import com.example.tunner.settings.GaugeStyle
 import com.example.tunner.settings.VisualMode
 import kotlin.math.roundToInt
 
@@ -52,9 +53,10 @@ fun ChromaticScreen(
         TunerGauge(
             cents = state.cents,
             flashTick = state.inTuneFlash,
+            style = settings.gaugeStyle,
             modifier = Modifier
                 .fillMaxWidth()
-                .height(112.dp),
+                .height(if (settings.gaugeStyle == GaugeStyle.DIAL) 216.dp else 112.dp),
         )
 
         Spacer(Modifier.height(4.dp))

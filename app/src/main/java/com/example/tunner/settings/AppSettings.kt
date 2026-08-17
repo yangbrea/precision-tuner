@@ -8,6 +8,12 @@ enum class ThemeMode { DARK, LIGHT }
 /** Which visualization is shown in the tuner screens. */
 enum class VisualMode { SPECTRUM, WAVEFORM }
 
+/** Which gauge style is drawn under the note readout. */
+enum class GaugeStyle(val label: String) {
+    RAIL("刻度条"),
+    DIAL("表盘"),
+}
+
 /** Debug-only pitch engine selection for Tiny CREPE A/B testing. */
 enum class DetectionEngine(val label: String) {
     PYIN_LITE("pYIN-lite"),
@@ -22,6 +28,7 @@ data class AppSettings(
     val filterStrength: Float = 0.5f, // 0..1, 0 = off
     val themeMode: ThemeMode = ThemeMode.DARK,
     val visualMode: VisualMode = VisualMode.SPECTRUM,
+    val gaugeStyle: GaugeStyle = GaugeStyle.RAIL,
     val detectionEngine: DetectionEngine = DetectionEngine.CREPE_HYBRID,
 
     // Selected instrument & tuning for the instrument tuner.

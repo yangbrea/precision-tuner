@@ -31,6 +31,8 @@ class SettingsRepository(context: Context) {
 
     fun setVisualMode(mode: VisualMode) = update { it.copy(visualMode = mode) }
 
+    fun setGaugeStyle(style: GaugeStyle) = update { it.copy(gaugeStyle = style) }
+
     fun setDetectionEngine(engine: DetectionEngine) = update { it.copy(detectionEngine = engine) }
 
     /** Select an instrument and reset its tuning to the instrument's default. */
@@ -49,6 +51,7 @@ class SettingsRepository(context: Context) {
             .putFloat(KEY_FILTER, next.filterStrength)
             .putString(KEY_THEME, next.themeMode.name)
             .putString(KEY_VISUAL, next.visualMode.name)
+            .putString(KEY_GAUGE_STYLE, next.gaugeStyle.name)
             .putString(KEY_DETECTION_ENGINE, next.detectionEngine.name)
             .putString(KEY_INSTRUMENT, next.instrumentId)
             .putString(KEY_TUNING, next.tuningId)
@@ -69,6 +72,9 @@ class SettingsRepository(context: Context) {
         val visual = runCatching {
             VisualMode.valueOf(prefs.getString(KEY_VISUAL, null) ?: "")
         }.getOrDefault(VisualMode.SPECTRUM)
+        val gaugeStyle = runCatching {
+            GaugeStyle.valueOf(prefs.getString(KEY_GAUGE_STYLE, null) ?: "")
+        }.getOrDefault(GaugeStyle.RAIL)
         val storedEngine = prefs.getString(KEY_DETECTION_ENGINE, null)
         val detectionEngine = if (storedEngine == "CREPE_SHADOW") {
             DetectionEngine.CREPE_HYBRID
@@ -90,6 +96,7 @@ class SettingsRepository(context: Context) {
             filterStrength = filter,
             themeMode = theme,
             visualMode = visual,
+            gaugeStyle = gaugeStyle,
             detectionEngine = detectionEngine,
             instrumentId = instrument,
             tuningId = tuning,
@@ -103,6 +110,7 @@ class SettingsRepository(context: Context) {
         const val KEY_FILTER = "filterStrength"
         const val KEY_THEME = "theme"
         const val KEY_VISUAL = "visual"
+        const val KEY_GAUGE_STYLE = "gaugeStyle"
         const val KEY_DETECTION_ENGINE = "detectionEngine"
         const val KEY_INSTRUMENT = "instrument"
         const val KEY_TUNING = "tuning"

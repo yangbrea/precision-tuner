@@ -44,6 +44,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.tunner.TunerState
 import com.example.tunner.settings.AppSettings
+import com.example.tunner.settings.GaugeStyle
 import com.example.tunner.settings.VisualMode
 import com.example.tunner.tuning.CustomTuningStore
 import com.example.tunner.tuning.CustomTuningPreset
@@ -128,9 +129,10 @@ fun InstrumentScreen(
         TunerGauge(
             cents = state.cents,
             flashTick = state.inTuneFlash,
+            style = settings.gaugeStyle,
             modifier = Modifier
                 .fillMaxWidth()
-                .height(108.dp),
+                .height(if (settings.gaugeStyle == GaugeStyle.DIAL) 196.dp else 108.dp),
         )
 
         Spacer(Modifier.height(4.dp))
@@ -139,7 +141,7 @@ fun InstrumentScreen(
                 waveform = state.waveform,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(48.dp),
+                    .height(if (settings.gaugeStyle == GaugeStyle.DIAL) 36.dp else 48.dp),
             )
         } else {
             SpectrumView(
@@ -147,7 +149,7 @@ fun InstrumentScreen(
                 detectedFrequency = state.detectedFrequency,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(48.dp),
+                    .height(if (settings.gaugeStyle == GaugeStyle.DIAL) 36.dp else 48.dp),
             )
         }
 

@@ -25,6 +25,7 @@ import com.example.tunner.pitch.TinyCrepeShadowMetrics
 import com.example.tunner.settings.AccentColor
 import com.example.tunner.settings.AppSettings
 import com.example.tunner.settings.DetectionEngine
+import com.example.tunner.settings.GaugeStyle
 import com.example.tunner.settings.Sensitivity
 import com.example.tunner.settings.SettingsRepository
 import com.example.tunner.settings.ThemeMode
@@ -133,6 +134,8 @@ class TunerViewModel(application: Application) : AndroidViewModel(application) {
     fun updateThemeMode(mode: ThemeMode) = settingsRepository.setThemeMode(mode)
 
     fun updateVisualMode(mode: VisualMode) = settingsRepository.setVisualMode(mode)
+
+    fun updateGaugeStyle(style: GaugeStyle) = settingsRepository.setGaugeStyle(style)
 
     fun updateDetectionEngine(engine: DetectionEngine) {
         settingsRepository.setDetectionEngine(engine)

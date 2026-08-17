@@ -2,6 +2,7 @@ package com.example.tunner
 
 import com.example.tunner.ui.GaugeEdge
 import com.example.tunner.ui.GaugeTone
+import com.example.tunner.ui.gaugeAngle
 import com.example.tunner.ui.gaugeReading
 import com.example.tunner.ui.shouldTriggerGaugePulse
 import org.junit.Assert.assertEquals
@@ -52,5 +53,18 @@ class TunerGaugeTest {
         assertTrue(shouldTriggerGaugePulse(0, 1))
         assertFalse(shouldTriggerGaugePulse(1, 1))
         assertTrue(shouldTriggerGaugePulse(1, 2))
+    }
+
+    @Test fun `dial angle maps rail fraction to the centered 200 degree arc`() {
+        assertEquals(170f, gaugeAngle(0f), 0.0001f) // -50¢, lower-left end
+        assertEquals(220f, gaugeAngle(0.25f), 0.0001f)
+        assertEquals(270f, gaugeAngle(0.5f), 0.0001f) // 0¢, top
+        assertEquals(320f, gaugeAngle(0.75f), 0.0001f)
+        assertEquals(370f, gaugeAngle(1f), 0.0001f) // +50¢, lower-right end
+    }
+
+    @Test fun `dial angle clamps out of range fractions`() {
+        assertEquals(170f, gaugeAngle(-0.5f), 0.0001f)
+        assertEquals(370f, gaugeAngle(1.5f), 0.0001f)
     }
 }
