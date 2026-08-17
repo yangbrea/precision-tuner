@@ -96,17 +96,18 @@ fun InstrumentScreen(
         val active = state.activeString?.let { tuning?.byNumber(it) }
         // Status text with the ear-training reference control on the same row,
         // so manual selection never adds a full row and the layout stays on one
-        // screen without scrolling.
+        // screen without scrolling. The row wraps its content and stays
+        // centered, so "自动识别" reads centered and the button sits close to
+        // the string label.
         val selectedTarget = state.selectedString?.let { tuning?.byNumber(it) }
         Row(
-            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(
                 text = active?.let { "第${it.number}弦 · ${it.fullNote}" } ?: "自动识别",
                 fontSize = 16.sp,
                 maxLines = 1,
-                modifier = Modifier.weight(1f),
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             if (selectedTarget != null) {
@@ -128,7 +129,7 @@ fun InstrumentScreen(
             }
         }
 
-        Spacer(Modifier.height(8.dp))
+        Spacer(Modifier.height(4.dp))
         Readout(
             noteName = state.noteName,
             octave = state.octave,
