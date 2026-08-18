@@ -1,5 +1,6 @@
 package com.precisiontuner.ui.theme
 
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.material3.ColorScheme
@@ -29,8 +30,17 @@ fun TunerTheme(
     darkTheme: Boolean = true,
     content: @Composable () -> Unit,
 ) {
-    val darkColors = remember(accent) { buildDarkScheme(accent) }
-    val lightColors = remember(accent) { buildLightScheme(accent) }
+    // Both the accent and the dark/light mode are animated: the color schemes
+    // are derived from the animating accent, and the mode transition lerps
+    // between the dark and light schemes, so switching either one fades
+    // smoothly instead of snapping.
+    val animatedAccent by animateColorAsState(
+        targetValue = accent,
+        animationSpec = tween(durationMillis = THEME_TRANSITION_MS),
+        label = "accentTransition",
+    )
+    val darkColors = remember(animatedAccent) { buildDarkScheme(animatedAccent) }
+    val lightColors = remember(animatedAccent) { buildLightScheme(animatedAccent) }
     val progress by animateFloatAsState(
         targetValue = if (darkTheme) 1f else 0f,
         animationSpec = tween(durationMillis = THEME_TRANSITION_MS),
