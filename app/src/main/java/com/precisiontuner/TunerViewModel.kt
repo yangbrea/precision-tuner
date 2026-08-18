@@ -72,6 +72,14 @@ class TunerViewModel(application: Application) : AndroidViewModel(application) {
     private val cueSound = CueSoundPlayer(application)
     private var cueMuteUntilNanos = 0L
     private var collectJob: Job? = null
+    // Epoch guarding the capture loop: a superseded loop (cancelled and
+    // restarted) exits at its next iteration instead of lingering alongside a
+    // fresh one, so two pipelines can never capture the mic concurrently.
+    private var listeningEpoch = 0L
+    // Whether this pipeline's UI is actually visible. Only the visible pipeline
+    // may play the in-tune cue; a backgrounded duplicate activity's pipeline
+    // must stay silent even if its gate fires.
+    private var uiActive = false
 
     private val noiseEstimator = NoiseFloorEstimator()
     private val pitchTracker = OnlinePitchTracker(lagFrames = TRACKER_LAG_FRAMES)
@@ -147,6 +155,11 @@ class TunerViewModel(application: Application) : AndroidViewModel(application) {
     fun updateDetectionEngine(engine: DetectionEngine) {
         settingsRepository.setDetectionEngine(engine)
         resetDetection()
+    }
+
+    /** Marks whether this pipeline's UI is visible; only a visible pipeline plays sounds. */
+    fun setUiActive(active: Boolean) {
+        uiActive = active
     }
 
     fun updateInstrument(instrumentId: String) {
@@ -227,6 +240,10 @@ class TunerViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private fun playInTuneCue() {
+        // Only the pipeline whose UI is visible may make noise. A backgrounded
+        // duplicate activity's pipeline must not play the cue even if its own
+        // gate fires (e.g. it auto-latched a string the user is plucking).
+        if (!uiActive) return
         // The speaker burst bleeds into the mic; freeze detection while the cue
         // plays so the tuner does not misread the cue as a pitch.
         cueMuteUntilNanos = System.nanoTime() + CUE_MUTE_MS * 1_000_000L
@@ -238,14 +255,19 @@ class TunerViewModel(application: Application) : AndroidViewModel(application) {
     fun startListening() {
         if (collectJob != null) return
         _state.update { it.copy(isListening = true) }
+        val epoch = ++listeningEpoch
         collectJob = viewModelScope.launch(Dispatchers.Default) {
             try {
                 audioInput.start()
                 // Prime: read a full frame and filter it once.
                 if (!audioInput.read(window, 0, FRAME_SIZE)) return@launch
                 filter.process(window, settings.value.filterStrength)
-                while (isActive) {
+                while (isActive && epoch == listeningEpoch) {
                     processWindow()
+                    // A stop/start cycle bumped the epoch; leave before reading
+                    // so a superseded loop cannot consume audio meant for the
+                    // fresh one.
+                    if (epoch != listeningEpoch) break
                     // Read HOP new raw samples, filter only them (stateful, so
                     // each sample is filtered exactly once), then slide.
                     if (!audioInput.read(hop, 0, HOP)) break
@@ -261,6 +283,10 @@ class TunerViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun stopListening() {
+        // Invalidate any in-flight loop first: even if the cancelled coroutine
+        // is blocked in a non-interruptible audio read, it exits at its next
+        // epoch check and can never double-capture with a later startListening.
+        listeningEpoch++
         collectJob?.cancel()
         collectJob = null
         audioInput.stop()

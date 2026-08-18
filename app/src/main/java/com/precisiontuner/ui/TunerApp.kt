@@ -41,6 +41,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.precisiontuner.TunerMode
 import com.precisiontuner.TunerState
@@ -91,8 +94,34 @@ fun TunerApp(viewModel: TunerViewModel, metronomeViewModel: MetronomeViewModel) 
         }
     }
 
-    DisposableEffect(Unit) {
+    // Stop capture and cue playback whenever this UI is not visible, and resume
+    // when it comes back. A backgrounded activity's pipeline must never keep
+    // recording or playing sounds — even a duplicated (hidden) instance.
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            when (event) {
+                Lifecycle.Event.ON_PAUSE -> {
+                    viewModel.setUiActive(false)
+                    viewModel.stopListening()
+                    metronomeViewModel.stop()
+                }
+                Lifecycle.Event.ON_RESUME -> {
+                    viewModel.setUiActive(true)
+                    if (state.hasPermission && state.mode != TunerMode.METRONOME) {
+                        viewModel.startListening()
+                    }
+                }
+                else -> Unit
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        if (lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) {
+            observer.onStateChanged(lifecycleOwner, Lifecycle.Event.ON_RESUME)
+        }
         onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+            viewModel.setUiActive(false)
             viewModel.stopListening()
             metronomeViewModel.stop()
         }

@@ -45,7 +45,7 @@ enum class AccentColor(val label: String, val color: Color) {
     ORANGE("橙", Color(0xFFFFB300)),
     PINK("粉", Color(0xFFFF4081)),
     PURPLE("紫", Color(0xFFB388FF)),
-    CYAN("青", Color(0xFF18FFFF)),
+    BROWN("棕", Color(0xFF8D6E63)),
 }
 
 /**
