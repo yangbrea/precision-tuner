@@ -5,6 +5,7 @@ import android.media.AudioAttributes
 import android.media.SoundPool
 import com.precisiontuner.tuning.NoteMapper
 import kotlin.math.abs
+import kotlin.math.pow
 
 /**
  * Plays a piano strike as the ear-tuning reference tone (replaces the old
@@ -51,10 +52,15 @@ class PianoReferenceEngine(context: Context) : AutoCloseable {
         }
         val keycenter = KEYCENTERS[best]
         val sampleFrequency = NoteMapper.frequencyFromMidi(keycenter)
-        val rate = (frequency / sampleFrequency).toFloat().coerceIn(0.5f, 2.0f)
+        // The bundled set is tuned sharp (A4 ≈ 442 Hz + per-note
+        // inharmonicity), so compensate each sampled key by its measured
+        // deviation (see ReferenceSamplePitchTest) to play back in tune.
+        val calibrationCents = CALIBRATION[best]
+        val rate = (frequency / sampleFrequency).toFloat() *
+            (2f).pow((-calibrationCents / 1200f))
         lastStreamId = pool.play(
             soundIds[best],
-            1f, 1f, 1, 0, rate,
+            1f, 1f, 1, 0, rate.coerceIn(0.5f, 2.0f),
         )
     }
 
@@ -78,6 +84,19 @@ class PianoReferenceEngine(context: Context) : AutoCloseable {
             55, 56, 57, 58, 59, 60, 62, 64, 65, 67, 69, 71, 72, 74, 76, 77, 79,
             80, 81, 82, 83, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94, 95, 96, 97,
             98, 99, 100, 101, 102, 103, 104, 105, 106, 107, 108,
+        )
+
+        /**
+         * Measured deviation (cents) of each bundled sample from its nominal
+         * equal-temperament pitch, one per [KEYCENTERS] entry, read by the
+         * app's own YinPitchDetector (ReferenceSamplePitchTest). Octave/garbage
+         * readings at the extremes were replaced with the local median.
+         */
+        val CALIBRATION = intArrayOf(
+            -4, -9, 11, 10, 12, 12, 12, 17, 19, 9, 7, 7, 9, 9, 9, 9, 8, 10, 11,
+            10, 5, 6, 7, 7, 5, 6, 7, 8, 9, 5, 5, 6, 7, 7, 8, 14, 7, 5, 7, 9, 12,
+            12, 10, 5, 6, 10, 17, 12, 18, 23, -1, 12, 22, 12, 12, 12, 12, 12, 12,
+            12, 12, 12,
         )
     }
 }
