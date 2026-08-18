@@ -80,3 +80,6 @@ MIT — see [LICENSE](LICENSE).
   `tools/crepe/convert_crepe.py`.
 - **Kenney Interface Sounds** (in-tune cue) — CC0, [kenney.nl](https://kenney.nl)
   (`app/src/main/assets/licenses/KENNEY_INTERFACE_SOUNDS_LICENSE.txt`).
+- **Piano reference-tone samples** ("钢琴声音" pack, MIDI 021–108) — license
+  **not included in the archive and currently unknown**; see
+  `app/src/main/assets/licenses/REFERENCE_PIANO_LICENSE.txt`.

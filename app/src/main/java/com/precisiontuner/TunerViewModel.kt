@@ -7,7 +7,7 @@ import androidx.lifecycle.viewModelScope
 import com.precisiontuner.audio.AudioInput
 import com.precisiontuner.audio.CueSoundPlayer
 import com.precisiontuner.audio.LowPassFilter
-import com.precisiontuner.audio.ReferenceToneEngine
+import com.precisiontuner.audio.PianoReferenceEngine
 import com.precisiontuner.audio.downsampleWaveform
 import com.precisiontuner.pitch.HybridPitchDetector
 import com.precisiontuner.pitch.AutomaticStringState
@@ -68,7 +68,7 @@ class TunerViewModel(application: Application) : AndroidViewModel(application) {
     private val detector = HybridPitchDetector()
     private val filter = LowPassFilter()
     private val audioInput = AudioInput(SAMPLE_RATE)
-    private val referenceTone = ReferenceToneEngine()
+    private val pianoReference = PianoReferenceEngine(application)
     private val cueSound = CueSoundPlayer(application)
     private var cueMuteUntilNanos = 0L
     private var collectJob: Job? = null
@@ -230,12 +230,12 @@ class TunerViewModel(application: Application) : AndroidViewModel(application) {
         val currentSettings = settings.value
         val target = resolveTuning(currentSettings.instrumentId, currentSettings.tuningId)
             ?.byNumber(selectedNumber) ?: return
-        referenceTone.start(target.frequency)
+        pianoReference.play(target.frequency)
         _state.update { it.copy(isReferenceTonePlaying = true) }
     }
 
     fun stopReferenceTone() {
-        referenceTone.stop()
+        pianoReference.stop()
         _state.update { it.copy(isReferenceTonePlaying = false) }
     }
 
@@ -290,7 +290,7 @@ class TunerViewModel(application: Application) : AndroidViewModel(application) {
         collectJob?.cancel()
         collectJob = null
         audioInput.stop()
-        referenceTone.stop()
+        pianoReference.stop()
         _state.update { it.copy(isListening = false, isReferenceTonePlaying = false) }
         resetDetection()
     }
@@ -693,6 +693,7 @@ class TunerViewModel(application: Application) : AndroidViewModel(application) {
     override fun onCleared() {
         tinyCrepeShadow?.close()
         cueSound.close()
+        pianoReference.close()
         stopListening()
         super.onCleared()
     }

@@ -1,0 +1,14 @@
+Piano reference-tone samples
+============================
+
+Source: "钢琴声音" (Piano Sounds) sample pack
+  GitHub archive "18b0b-main" (main branch), archived 2023-06-21.
+  88 WAV files, one per MIDI note 021 (A0) - 108 (C8),
+  1-second stereo 44.1 kHz 16-bit; converted to mono 44.1 kHz for this app.
+
+License: UNKNOWN — the archive contains no license or attribution file, and the
+upstream repository could not be identified at integration time. The samples
+are bundled here at the project owner's discretion. If you are the author or
+know the upstream repository, please contact the project maintainer so this
+notice can be corrected; if redistribution is not permitted, these samples
+should be replaced with a CC-licensed set (e.g. VSCO2 CE, CC0).
