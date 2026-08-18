@@ -42,7 +42,8 @@ fun TunerTheme(
     val darkColors = remember(animatedAccent) { buildDarkScheme(animatedAccent) }
     val lightColors = remember(animatedAccent) { buildLightScheme(animatedAccent) }
     val progress by animateFloatAsState(
-        targetValue = if (darkTheme) 1f else 0f,
+        // 0 = dark scheme, 1 = light scheme (lerp(dark, light, progress)).
+        targetValue = if (darkTheme) 0f else 1f,
         animationSpec = tween(durationMillis = THEME_TRANSITION_MS),
         label = "themeModeTransition",
     )
