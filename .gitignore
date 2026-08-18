@@ -19,3 +19,7 @@ __pycache__/
 *.pyc
 /app/src/fullCrepe/
 .git.backup-*/
+
+# Release artifacts
+*.apk
+*.idsig
