@@ -3,6 +3,7 @@ package com.precisiontuner.ui
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
@@ -15,6 +16,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.platform.LocalFocusManager
@@ -122,7 +124,7 @@ private fun PresetEditor(
                     onValueChange = {}, readOnly = true, label = { Text("关联乐器") },
                     modifier = Modifier.fillMaxWidth().clickable { menuOpen = true },
                 )
-                Box(Modifier.matchParentSize().clickable { menuOpen = true })
+                Box(Modifier.matchParentSize().clip(RoundedCornerShape(4.dp)).clickable { menuOpen = true })
                 DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
                     DropdownMenuItem(text = { Text("未分类") }, onClick = { instrumentId = null; menuOpen = false })
                     InstrumentCatalog.instruments.forEach { inst ->

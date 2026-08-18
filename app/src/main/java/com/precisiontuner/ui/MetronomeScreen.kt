@@ -307,6 +307,7 @@ private fun Chip(label: String, selected: Boolean, onClick: () -> Unit) {
     val primary = MaterialTheme.colorScheme.primary
     Box(
         modifier = Modifier
+            .clip(RoundedCornerShape(10.dp))
             .background(if (selected) primary.copy(alpha = 0.2f) else MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(10.dp))
             .border(
                 width = 1.5.dp,

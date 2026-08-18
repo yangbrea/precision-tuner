@@ -236,6 +236,7 @@ private fun StringSelector(
             Column(
                 modifier = Modifier
                     .weight(1f)
+                    .clip(RoundedCornerShape(12.dp))
                     .background(background, RoundedCornerShape(12.dp))
                     .border(1.5.dp, border, RoundedCornerShape(12.dp))
                     .clickable { onSelect(if (isSelected) null else s.number) }

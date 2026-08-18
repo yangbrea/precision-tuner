@@ -27,6 +27,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -116,6 +117,7 @@ private fun DetectionEngineRow(
             Box(
                 modifier = Modifier
                     .weight(1f)
+                    .clip(RoundedCornerShape(12.dp))
                     .background(
                         if (active) accent.copy(alpha = 0.2f) else MaterialTheme.colorScheme.surfaceVariant,
                         RoundedCornerShape(12.dp),
@@ -166,6 +168,7 @@ private fun ThemeModeRow(selected: ThemeMode, onSelect: (ThemeMode) -> Unit) {
             Box(
                 modifier = Modifier
                     .weight(1f)
+                    .clip(RoundedCornerShape(12.dp))
                     .background(
                         if (isSelected) accent.copy(alpha = 0.2f) else MaterialTheme.colorScheme.surfaceVariant,
                         RoundedCornerShape(12.dp),
@@ -199,6 +202,7 @@ private fun VisualModeRow(selected: VisualMode, onSelect: (VisualMode) -> Unit) 
             Box(
                 modifier = Modifier
                     .weight(1f)
+                    .clip(RoundedCornerShape(12.dp))
                     .background(
                         if (isSelected) accent.copy(alpha = 0.2f) else MaterialTheme.colorScheme.surfaceVariant,
                         RoundedCornerShape(12.dp),
@@ -232,6 +236,7 @@ private fun GaugeStyleRow(selected: GaugeStyle, onSelect: (GaugeStyle) -> Unit) 
             Box(
                 modifier = Modifier
                     .weight(1f)
+                    .clip(RoundedCornerShape(12.dp))
                     .background(
                         if (isSelected) accent.copy(alpha = 0.2f) else MaterialTheme.colorScheme.surfaceVariant,
                         RoundedCornerShape(12.dp),
@@ -267,6 +272,7 @@ private fun AccentRow(selected: AccentColor, onSelect: (AccentColor) -> Unit) {
             Box(
                 modifier = Modifier
                     .size(44.dp)
+                    .clip(CircleShape)
                     .background(accent.color, CircleShape)
                     .border(
                         width = if (isSelected) 3.dp else 1.dp,
@@ -300,6 +306,7 @@ private fun SensitivityRow(selected: Sensitivity, onSelect: (Sensitivity) -> Uni
             Box(
                 modifier = Modifier
                     .weight(1f)
+                    .clip(RoundedCornerShape(12.dp))
                     .background(
                         if (isSelected) accent.copy(alpha = 0.2f) else MaterialTheme.colorScheme.surfaceVariant,
                         RoundedCornerShape(12.dp),
