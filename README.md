@@ -1,7 +1,20 @@
 # Precision Tuner
 
+<p align="center">
+  <img alt="License: MIT" src="https://img.shields.io/badge/License-MIT-yellow.svg">
+  <img alt="Platform: Android" src="https://img.shields.io/badge/Platform-Android-3ddc84.svg">
+  <img alt="minSdk" src="https://img.shields.io/badge/minSdk-24-brightgreen.svg">
+  <img alt="AI: pYIN + Tiny CREPE" src="https://img.shields.io/badge/AI-pYIN%20%2B%20Tiny%20CREPE-blueviolet.svg">
+</p>
+
 A precision all-in-one tuner for Android: instrument tuner, chromatic tuner with
 historical temperaments, and a metronome — with AI-assisted pitch detection.
+
+## Screenshots
+
+| Instrument tuner | Chromatic tuner | Metronome |
+| :-: | :-: | :-: |
+| <img src="screenshots/instrument.png" width="240" alt="Instrument tuner"/> | <img src="screenshots/chromatic.png" width="240" alt="Chromatic tuner"/> | <img src="screenshots/metronome.png" width="240" alt="Metronome"/> |
 
 ## Features
 
@@ -24,7 +37,9 @@ historical temperaments, and a metronome — with AI-assisted pitch detection.
 
 ## Screenshots
 
-*TBD — add captures of the instrument tuner, chromatic tuner, and metronome.*
+| Instrument tuner | Chromatic tuner | Metronome |
+| :-: | :-: | :-: |
+| <img src="screenshots/instrument.png" width="240" alt="Instrument tuner"/> | <img src="screenshots/chromatic.png" width="240" alt="Chromatic tuner"/> | <img src="screenshots/metronome.png" width="240" alt="Metronome"/> |
 
 ## Build
 
