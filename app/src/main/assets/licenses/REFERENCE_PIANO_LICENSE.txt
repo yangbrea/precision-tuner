@@ -1,14 +1,17 @@
 Piano reference-tone samples
 ============================
 
-Source: "钢琴声音" (Piano Sounds) sample pack
-  GitHub archive "18b0b-main" (main branch), archived 2023-06-21.
-  88 WAV files, one per MIDI note 021 (A0) - 108 (C8),
-  1-second stereo 44.1 kHz 16-bit; converted to mono 44.1 kHz for this app.
+Source: Splendid Grand Piano
+  Public Domain samples released by AKAI in the early 2000s
+  (Steinway piano, 4 velocity layers).
+  Repackaged/converted by kinwie: https://github.com/sfzinstruments/SplendidGrandPiano
+  ("Splendid Grand Piano.sfz", 256 MB version)
 
-License: UNKNOWN — the archive contains no license or attribution file, and the
-upstream repository could not be identified at integration time. The samples
-are bundled here at the project owner's discretion. If you are the author or
-know the upstream repository, please contact the project maintainer so this
-notice can be corrected; if redistribution is not permitted, these samples
-should be replaced with a CC-licensed set (e.g. VSCO2 CE, CC0).
+Used here: the MF (mezzo-forte) layer, 62 sampled keys MIDI 23..108,
+decoded from FLAC to mono 44.1 kHz 16-bit WAV and trimmed to ~2 s for use
+as the app's ear-tuning reference tone. Per the upstream README, modified
+distributions should note that this sfz instrument is derived from the
+Splendid Grand Piano repository.
+
+License: PUBLIC DOMAIN (samples by AKAI); conversion by kinwie under the
+upstream project's terms (attribution requested).

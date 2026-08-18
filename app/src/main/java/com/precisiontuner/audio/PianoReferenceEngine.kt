@@ -4,16 +4,17 @@ import android.content.Context
 import android.media.AudioAttributes
 import android.media.SoundPool
 import com.precisiontuner.tuning.NoteMapper
+import kotlin.math.abs
 
 /**
  * Plays a piano strike as the ear-tuning reference tone (replaces the old
  * looping sine engine).
  *
- * One WAV per MIDI note (021..108, full piano range) is bundled under
- * assets/reference/piano/<midi>.wav. The exact target frequency is matched by
- * picking the nearest note sample and scaling the playback rate, which covers
- * custom tunings and the adjustable A4 reference (rate stays within one
- * semitone of the sample).
+ * Samples are one WAV per sampled key (assets/reference/piano/<keycenter>.wav,
+ * 62 keycenters spanning MIDI 23..108 from the Splendid Grand Piano public
+ * domain set). A target pitch is played from the nearest sampled key scaled by
+ * the playback rate, which covers every note plus custom tunings and the
+ * adjustable A4 reference (rate stays well within the ±2 semitone gap).
  */
 class PianoReferenceEngine(context: Context) : AutoCloseable {
 
@@ -27,8 +28,8 @@ class PianoReferenceEngine(context: Context) : AutoCloseable {
         )
         .build()
 
-    private val soundIds = IntArray(MAX_MIDI - MIN_MIDI + 1) { i ->
-        val midi = MIN_MIDI + i
+    private val soundIds = IntArray(KEYCENTERS.size) { i ->
+        val midi = KEYCENTERS[i]
         context.assets.openFd("reference/piano/${midi.toString().padStart(3, '0')}.wav").use { afd ->
             pool.load(afd, 1)
         }
@@ -39,10 +40,20 @@ class PianoReferenceEngine(context: Context) : AutoCloseable {
     fun play(frequency: Double) {
         if (!frequency.isFinite() || frequency <= 0.0) return
         val midi = NoteMapper.midiFromFrequency(frequency).coerceIn(MIN_MIDI, MAX_MIDI)
-        val sampleFrequency = NoteMapper.frequencyFromMidi(midi)
+        var best = 0
+        var bestDistance = Int.MAX_VALUE
+        for (i in KEYCENTERS.indices) {
+            val distance = abs(KEYCENTERS[i] - midi)
+            if (distance < bestDistance) {
+                bestDistance = distance
+                best = i
+            }
+        }
+        val keycenter = KEYCENTERS[best]
+        val sampleFrequency = NoteMapper.frequencyFromMidi(keycenter)
         val rate = (frequency / sampleFrequency).toFloat().coerceIn(0.5f, 2.0f)
         lastStreamId = pool.play(
-            soundIds[midi - MIN_MIDI],
+            soundIds[best],
             1f, 1f, 1, 0, rate,
         )
     }
@@ -60,5 +71,13 @@ class PianoReferenceEngine(context: Context) : AutoCloseable {
     private companion object {
         const val MIN_MIDI = 21
         const val MAX_MIDI = 108
+
+        /** Sampled keys from the Splendid Grand Piano MF layer. */
+        val KEYCENTERS = intArrayOf(
+            23, 27, 29, 31, 33, 35, 37, 38, 40, 41, 43, 45, 47, 48, 50, 52, 53,
+            55, 56, 57, 58, 59, 60, 62, 64, 65, 67, 69, 71, 72, 74, 76, 77, 79,
+            80, 81, 82, 83, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94, 95, 96, 97,
+            98, 99, 100, 101, 102, 103, 104, 105, 106, 107, 108,
+        )
     }
 }
