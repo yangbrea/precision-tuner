@@ -17,12 +17,14 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.PlatformTextStyle
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.precisiontuner.TunerState
+import com.precisiontuner.TuneVisualState
 import com.precisiontuner.DetectionPhase
 import com.precisiontuner.ui.theme.TunerFlat
 import com.precisiontuner.ui.theme.TunerSharp
@@ -46,6 +48,10 @@ fun formatFrequency(freq: Double): String {
 
 /**
  * Shared readout: big note name + octave, cents verdict, and frequency.
+ *
+ * All verdict colors and the 偏低/调准/偏高 text are driven by the stabilized
+ * [visualState] so the boundary at ±5¢ never flickers; raw [cents] is only
+ * shown as the numeric value.
  */
 @Composable
 fun Readout(
@@ -57,16 +63,18 @@ fun Readout(
     observedNoteName: String?,
     observedOctave: Int?,
     flashTick: Int = 0,
+    visualState: TuneVisualState = TuneVisualState.WAITING,
     modifier: Modifier = Modifier,
 ) {
-    val inTune = detectionPhase == DetectionPhase.TRACKING &&
-        cents != null && abs(cents) <= TunerState.IN_TUNE_CENTS
+    val inTune = visualState == TuneVisualState.IN_TUNE
     val primary = MaterialTheme.colorScheme.primary
+    val haptics = LocalHapticFeedback.current
 
     // One-shot "locked" pulse: scale the note briefly on each in-tune flash.
     var pulse by remember { mutableStateOf(false) }
     LaunchedEffect(flashTick) {
         if (flashTick > 0) {
+            haptics.performHapticFeedback(HapticFeedbackType.LongPress)
             pulse = true
             delay(130)
             pulse = false
@@ -125,18 +133,23 @@ fun Readout(
                     if (cents < 0) "检测到 $observed · 远低于目标"
                     else "检测到 $observed · 远高于目标"
                 }
-                inTune -> "已调准"
-                cents < 0 -> "偏低 ${formatCents(cents)}"
-                else -> "偏高 ${formatCents(cents)}"
+                visualState == TuneVisualState.IN_TUNE -> "已调准"
+                visualState == TuneVisualState.LOW -> "偏低 ${formatCents(cents)}"
+                visualState == TuneVisualState.HIGH -> "偏高 ${formatCents(cents)}"
+                else -> "等待输入…"
             },
             fontSize = 20.sp,
             fontWeight = FontWeight.SemiBold,
             maxLines = 1,
             color = when {
-                detectionPhase == DetectionPhase.WAITING || cents == null -> MaterialTheme.colorScheme.onSurfaceVariant
-                inTune -> primary
-                cents < 0 -> TunerFlat
-                else -> TunerSharp
+                detectionPhase == DetectionPhase.WAITING || cents == null ->
+                    MaterialTheme.colorScheme.onSurfaceVariant
+                detectionPhase == DetectionPhase.OUT_OF_RANGE ->
+                    if (cents < 0) TunerFlat else TunerSharp
+                visualState == TuneVisualState.IN_TUNE -> primary
+                visualState == TuneVisualState.LOW -> TunerFlat
+                visualState == TuneVisualState.HIGH -> TunerSharp
+                else -> MaterialTheme.colorScheme.onSurfaceVariant
             },
         )
 

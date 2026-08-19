@@ -32,6 +32,14 @@ historical temperaments, and a metronome — with AI-assisted pitch detection.
   `full` (44.5 MB) — `small` is the default and measured sweet spot.
 - **Metronome** — BPM presets, tap tempo, time signatures, subdivisions
   (eighths / triplets / sixteenths), downbeat accent, circular progress ring.
+- **视听练耳 (Ear training)** — a game-like quiz module: 单音识别 (note),
+  音程听辨 (interval), 和弦听辨 (chord) and 音阶听辨 (scale) recognition, each
+  with three modes — 无尽 (endless), 挑战 (challenge: five lives) and 测试
+  (fixed-length test) — plus a placeholder 五线谱识谱 (staff reading) tab.
+  A system difficulty preset (简单/中等/困难) drives the question pools, and
+  questions are played with the bundled piano samples and answered as 4-option
+  multiple choice, with game-style feedback (pulse play button, wrong-answer
+  shake, accuracy ring, lives hearts, correct/wrong sound cues).
 - **Visualizations** — spectrum and time-domain waveform views; two gauge
   styles (precision rail / dial) in a flat dark-light theme.
 
@@ -53,13 +61,15 @@ read-only-`~/.gradle` workaround) and uses Android Studio's bundled JDK:
 ./build.sh ./gradlew testDebugUnitTest                 # unit tests
 ```
 
-Install to a connected device:
+Install to a connected device (CREPE enabled by default; pass `--no-crepe` to
+install a DSP-only build):
 
 ```bash
-./install-device.sh DEVICE_SERIAL --tiny-crepe
+./install-device.sh DEVICE_SERIAL
+./install-device.sh DEVICE_SERIAL --no-crepe
 ```
 
-The CREPE experiment build is arm64-only; the normal build keeps all ABIs. See
+The CREPE build is arm64-only; the `--no-crepe` build keeps all ABIs. See
 `tools/crepe/README.md` for the reproducible model conversion pipeline
 (weights are kept out of Git; hashes are recorded).
 

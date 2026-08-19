@@ -24,12 +24,13 @@ committed `app/src/tinyCrepe/assets/tiny_crepe_fp16.tflite` byte-for-byte
 ## Selecting the model at build time
 
 `-PcrepeModel=tiny|small|medium|large|full` picks which bundled model and
-asset directory are used; it defaults to `tiny` (zero-change normal build).
+asset directory are used; it defaults to `small` (the measured sweet spot).
 The app reads the selected asset name from `BuildConfig.CREPE_MODEL_ASSET`.
 
 ```bash
 GRADLE_USER_HOME="$PWD/.gradle-home" ./gradlew -PtinyCrepeEnabled=true -PcrepeModel=small assembleDebug
-./install-device.sh DEVICE_SERIAL --tiny-crepe   # keeps the last built APK
+./install-device.sh DEVICE_SERIAL              # CREPE by default
+./install-device.sh DEVICE_SERIAL --no-crepe   # DSP-only build
 adb -s DEVICE_SERIAL shell setprop log.tag.Tuner D
 adb -s DEVICE_SERIAL logcat -s Tuner:D TinyCrepe:D '*:S'
 ```

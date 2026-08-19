@@ -41,8 +41,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.precisiontuner.TuneVisualState
 import com.precisiontuner.TunerState
 import com.precisiontuner.settings.AppSettings
 import com.precisiontuner.settings.GaugeStyle
@@ -71,12 +73,19 @@ fun InstrumentScreen(
     val instrumentName = if (settings.instrumentId == CustomTuningStore.CUSTOM_INSTRUMENT_ID) "自定义" else InstrumentCatalog.instrument(settings.instrumentId)?.name ?: "?"
     var showPicker by remember { mutableStateOf(false) }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(horizontal = 20.dp, vertical = 8.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
+    Box(modifier = Modifier.fillMaxSize()) {
+        NeonScreenBackground(
+            cents = state.cents,
+            active = state.cents != null,
+            pulseTick = state.inTuneFlash,
+            visualState = state.visualState,
+        )
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 20.dp, vertical = 8.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
         Row(
             modifier = Modifier
                 .clip(RoundedCornerShape(10.dp))
@@ -94,36 +103,39 @@ fun InstrumentScreen(
         }
 
         val active = state.activeString?.let { tuning?.byNumber(it) }
-        // Status text with the ear-training reference control on the same row,
+        // Status text with the ear-tuning reference control on the same row,
         // so manual selection never adds a full row and the layout stays on one
-        // screen without scrolling. The row wraps its content and stays
-        // centered, so "自动识别" reads centered and the button sits close to
-        // the string label.
+        // screen without scrolling. The row is capped at the full width and the
+        // label ellipsizes, so the extra button can never push the layout open;
+        // the button is kept compact so the row height barely grows.
         val selectedTarget = state.selectedString?.let { tuning?.byNumber(it) }
         Row(
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(10.dp, Alignment.CenterHorizontally),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(
                 text = active?.let { "第${it.number}弦 · ${it.fullNote}" } ?: "自动识别",
                 fontSize = 16.sp,
                 maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             if (selectedTarget != null) {
                 TextButton(
                     onClick = onToggleReferenceTone,
-                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
+                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                    modifier = Modifier.height(32.dp),
                 ) {
                     Icon(
                         imageVector = if (state.isReferenceTonePlaying) Icons.Filled.Stop else Icons.Filled.PlayArrow,
                         contentDescription = if (state.isReferenceTonePlaying) "停止参考音" else "播放参考音",
-                        modifier = Modifier.size(16.dp),
+                        modifier = Modifier.size(14.dp),
                     )
                     Spacer(Modifier.width(4.dp))
                     Text(
                         text = if (state.isReferenceTonePlaying) "停止参考音" else "参考音 ${selectedTarget.fullNote}",
-                        fontSize = 13.sp,
+                        fontSize = 12.sp,
                     )
                 }
             }
@@ -139,16 +151,24 @@ fun InstrumentScreen(
             observedNoteName = state.observedNoteName,
             observedOctave = state.observedOctave,
             flashTick = state.inTuneFlash,
+            visualState = state.visualState,
         )
 
-        TunerGauge(
-            cents = state.cents,
-            flashTick = state.inTuneFlash,
-            style = settings.gaugeStyle,
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(if (settings.gaugeStyle == GaugeStyle.DIAL) 168.dp else 108.dp),
-        )
+            NeonPanel(
+                highlighted = state.visualState == TuneVisualState.IN_TUNE,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                TunerGauge(
+                    cents = state.cents,
+                    flashTick = state.inTuneFlash,
+                    style = settings.gaugeStyle,
+                    visualState = state.visualState,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(if (settings.gaugeStyle == GaugeStyle.DIAL) 176.dp else 114.dp)
+                        .padding(horizontal = 6.dp),
+                )
+            }
 
         Spacer(Modifier.height(4.dp))
         if (settings.visualMode == VisualMode.WAVEFORM) {
@@ -174,17 +194,18 @@ fun InstrumentScreen(
                 strings = tuning.strings,
                 activeString = state.activeString,
                 selectedString = state.selectedString,
-                inTune = state.isInTune,
+                inTune = state.visualState == TuneVisualState.IN_TUNE,
                 onSelect = onSelectString,
             )
         }
 
         Spacer(Modifier.weight(1f))
-        Text(
-            text = "点选某根弦可手动调音，再次点选回到自动识别",
-            fontSize = 12.sp,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
+            Text(
+                text = "点选某根弦可手动调音，再次点选回到自动识别",
+                fontSize = 12.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
     }
 
     if (showPicker) {

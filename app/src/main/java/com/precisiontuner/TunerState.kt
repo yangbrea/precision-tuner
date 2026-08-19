@@ -1,7 +1,7 @@
 package com.precisiontuner
 
 /** Which tool is currently active. */
-enum class TunerMode { INSTRUMENT, CHROMATIC, METRONOME }
+enum class TunerMode { INSTRUMENT, CHROMATIC, METRONOME, EAR_TRAINING }
 
 /** How the current signal relates to the active tuning target. */
 enum class DetectionPhase { WAITING, TRACKING, OUT_OF_RANGE }
@@ -51,8 +51,13 @@ data class TunerState(
     // Increments on each "not in tune -> in tune" rising edge; drives the
     // one-shot "locked" flash animation.
     val inTuneFlash: Int = 0,
+
+    // Stabilized visual verdict, computed by TuneVisualStabilizer from the raw
+    // per-frame cents. UI-only: pitch detection never reads it, and it never
+    // produces sounds, pulses, or haptics (those stay on inTuneFlash).
+    val visualState: TuneVisualState = TuneVisualState.WAITING,
 ) {
-    /** True when the detected pitch is within a small window of the target. */
+    /** Raw (undebounced) in-tune check. Prefer [visualState] for any UI verdict. */
     val isInTune: Boolean
         get() = detectionPhase == DetectionPhase.TRACKING &&
             cents != null && kotlin.math.abs(cents) <= IN_TUNE_CENTS

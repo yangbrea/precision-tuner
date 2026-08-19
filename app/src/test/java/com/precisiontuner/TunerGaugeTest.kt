@@ -13,39 +13,48 @@ import org.junit.Test
 
 class TunerGaugeTest {
     @Test fun `key cents values map linearly across the rail`() {
-        assertEquals(0f, gaugeReading(-50.0).positionFraction, 0.0001f)
-        assertEquals(0.25f, gaugeReading(-25.0).positionFraction, 0.0001f)
-        assertEquals(0.5f, gaugeReading(0.0).positionFraction, 0.0001f)
-        assertEquals(0.75f, gaugeReading(25.0).positionFraction, 0.0001f)
-        assertEquals(1f, gaugeReading(50.0).positionFraction, 0.0001f)
+        assertEquals(0f, gaugeReading(-50.0, TuneVisualState.HIGH).positionFraction, 0.0001f)
+        assertEquals(0.25f, gaugeReading(-25.0, TuneVisualState.HIGH).positionFraction, 0.0001f)
+        assertEquals(0.5f, gaugeReading(0.0, TuneVisualState.HIGH).positionFraction, 0.0001f)
+        assertEquals(0.75f, gaugeReading(25.0, TuneVisualState.HIGH).positionFraction, 0.0001f)
+        assertEquals(1f, gaugeReading(50.0, TuneVisualState.HIGH).positionFraction, 0.0001f)
     }
 
     @Test fun `out of range values clamp and expose direction`() {
-        assertEquals(0f, gaugeReading(-80.0).positionFraction, 0.0001f)
-        assertEquals(GaugeEdge.LOW, gaugeReading(-80.0).edge)
-        assertEquals(1f, gaugeReading(72.0).positionFraction, 0.0001f)
-        assertEquals(GaugeEdge.HIGH, gaugeReading(72.0).edge)
+        assertEquals(0f, gaugeReading(-80.0, TuneVisualState.LOW).positionFraction, 0.0001f)
+        assertEquals(GaugeEdge.LOW, gaugeReading(-80.0, TuneVisualState.LOW).edge)
+        assertEquals(1f, gaugeReading(72.0, TuneVisualState.HIGH).positionFraction, 0.0001f)
+        assertEquals(GaugeEdge.HIGH, gaugeReading(72.0, TuneVisualState.HIGH).edge)
     }
 
-    @Test fun `in tune window snaps to center inclusively`() {
-        listOf(-5.0, -2.4, 0.0, 4.9, 5.0).forEach { cents ->
-            val reading = gaugeReading(cents)
+    @Test fun `stable in tune visual state snaps to center regardless of raw cents`() {
+        listOf(-5.0, -2.4, 0.0, 4.9, 5.0, 6.5).forEach { cents ->
+            val reading = gaugeReading(cents, TuneVisualState.IN_TUNE)
             assertEquals(0.5f, reading.positionFraction, 0.0001f)
             assertEquals(GaugeTone.IN_TUNE, reading.tone)
         }
-        assertTrue(gaugeReading(-5.1).positionFraction < 0.5f)
-        assertTrue(gaugeReading(5.1).positionFraction > 0.5f)
+    }
+
+    @Test fun `unconfirmed center input keeps smooth raw movement`() {
+        // While the 4-frame confirmation is running the cursor must not snap.
+        val sharp = gaugeReading(4.9, TuneVisualState.HIGH)
+        assertTrue(sharp.positionFraction > 0.5f)
+        assertEquals(GaugeTone.SHARP, sharp.tone)
+        val flat = gaugeReading(-4.9, TuneVisualState.LOW)
+        assertTrue(flat.positionFraction < 0.5f)
+        assertEquals(GaugeTone.FLAT, flat.tone)
+        assertTrue(gaugeReading(5.1, TuneVisualState.HIGH).positionFraction > 0.5f)
     }
 
     @Test fun `waiting state has no active reading`() {
-        val reading = gaugeReading(null)
+        val reading = gaugeReading(null, TuneVisualState.WAITING)
         assertNull(reading.displayedCents)
         assertEquals(GaugeTone.WAITING, reading.tone)
     }
 
     @Test fun `flat and sharp states retain semantic color state`() {
-        assertEquals(GaugeTone.FLAT, gaugeReading(-18.0).tone)
-        assertEquals(GaugeTone.SHARP, gaugeReading(18.0).tone)
+        assertEquals(GaugeTone.FLAT, gaugeReading(-18.0, TuneVisualState.LOW).tone)
+        assertEquals(GaugeTone.SHARP, gaugeReading(18.0, TuneVisualState.HIGH).tone)
     }
 
     @Test fun `pulse only triggers for a new positive tick`() {

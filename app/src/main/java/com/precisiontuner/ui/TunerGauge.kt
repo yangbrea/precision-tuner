@@ -27,10 +27,10 @@ import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
+import com.precisiontuner.TuneVisualState
 import com.precisiontuner.settings.GaugeStyle
 import com.precisiontuner.ui.theme.TunerFlat
 import com.precisiontuner.ui.theme.TunerSharp
-import kotlin.math.abs
 import kotlin.math.cos
 import kotlin.math.min
 import kotlin.math.sin
@@ -50,11 +50,19 @@ internal data class GaugeReading(
     val tone: GaugeTone,
 )
 
-internal fun gaugeReading(cents: Double?): GaugeReading {
+/**
+ * Maps the raw cents plus the stabilized visual verdict to a gauge reading.
+ *
+ * The cursor only snaps to the center after [TuneVisualState.IN_TUNE] is
+ * confirmed; during the ~180 ms confirmation it keeps following the raw cents
+ * so the movement stays smooth. The tone (cursor color / semantics) always
+ * comes from the stabilized [visualState], never from raw [cents].
+ */
+internal fun gaugeReading(cents: Double?, visualState: TuneVisualState): GaugeReading {
     if (cents == null || !cents.isFinite()) {
         return GaugeReading(0.5f, null, null, GaugeEdge.NONE, GaugeTone.WAITING)
     }
-    val inTune = abs(cents) <= GAUGE_IN_TUNE_CENTS
+    val inTune = visualState == TuneVisualState.IN_TUNE
     val displayed = if (inTune) 0.0 else cents.coerceIn(GAUGE_MIN_CENTS, GAUGE_MAX_CENTS)
     val fraction = ((displayed - GAUGE_MIN_CENTS) / (GAUGE_MAX_CENTS - GAUGE_MIN_CENTS)).toFloat()
     return GaugeReading(
@@ -66,10 +74,11 @@ internal fun gaugeReading(cents: Double?): GaugeReading {
             cents > GAUGE_MAX_CENTS -> GaugeEdge.HIGH
             else -> GaugeEdge.NONE
         },
-        tone = when {
-            inTune -> GaugeTone.IN_TUNE
-            cents < 0.0 -> GaugeTone.FLAT
-            else -> GaugeTone.SHARP
+        tone = when (visualState) {
+            TuneVisualState.WAITING -> GaugeTone.WAITING
+            TuneVisualState.LOW -> GaugeTone.FLAT
+            TuneVisualState.IN_TUNE -> GaugeTone.IN_TUNE
+            TuneVisualState.HIGH -> GaugeTone.SHARP
         },
     )
 }
@@ -103,9 +112,10 @@ fun TunerGauge(
     cents: Double?,
     flashTick: Int = 0,
     style: GaugeStyle = GaugeStyle.RAIL,
+    visualState: TuneVisualState = TuneVisualState.WAITING,
     modifier: Modifier = Modifier,
 ) {
-    val reading = gaugeReading(cents)
+    val reading = gaugeReading(cents, visualState)
     val animatedPosition by animateFloatAsState(
         targetValue = reading.positionFraction,
         animationSpec = tween(durationMillis = 90),
@@ -142,8 +152,9 @@ fun TunerGauge(
         reading.tone == GaugeTone.IN_TUNE -> "调音仪表，已调准"
         reading.edge == GaugeEdge.LOW -> "调音仪表，低于负五十音分"
         reading.edge == GaugeEdge.HIGH -> "调音仪表，高于正五十音分"
-        cents < 0.0 -> "调音仪表，偏低 ${formatCents(cents)}"
-        else -> "调音仪表，偏高 ${formatCents(cents)}"
+        reading.tone == GaugeTone.FLAT -> "调音仪表，偏低 ${formatCents(cents)}"
+        reading.tone == GaugeTone.SHARP -> "调音仪表，偏高 ${formatCents(cents)}"
+        else -> "调音仪表，等待输入"
     }
 
     Canvas(

@@ -7,7 +7,7 @@ import androidx.lifecycle.viewModelScope
 import com.precisiontuner.audio.AudioInput
 import com.precisiontuner.audio.CueSoundPlayer
 import com.precisiontuner.audio.LowPassFilter
-import com.precisiontuner.audio.PianoReferenceEngine
+import com.precisiontuner.audio.PianoEngineShare
 import com.precisiontuner.audio.downsampleWaveform
 import com.precisiontuner.pitch.HybridPitchDetector
 import com.precisiontuner.pitch.AutomaticStringState
@@ -41,6 +41,7 @@ import com.precisiontuner.tuning.NoteMapper
 import com.precisiontuner.tuning.Tuning
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -68,10 +69,12 @@ class TunerViewModel(application: Application) : AndroidViewModel(application) {
     private val detector = HybridPitchDetector()
     private val filter = LowPassFilter()
     private val audioInput = AudioInput(SAMPLE_RATE)
-    private val pianoReference = PianoReferenceEngine(application)
+    private val pianoReference = PianoEngineShare.acquire(application)
     private val cueSound = CueSoundPlayer(application)
     private var cueMuteUntilNanos = 0L
     private var collectJob: Job? = null
+    // Auto-reset for the reference-tone "playing" state after the strike decays.
+    private var referenceToneJob: Job? = null
     // Epoch guarding the capture loop: a superseded loop (cancelled and
     // restarted) exits at its next iteration instead of lingering alongside a
     // fresh one, so two pipelines can never capture the mic concurrently.
@@ -88,6 +91,8 @@ class TunerViewModel(application: Application) : AndroidViewModel(application) {
     private val crepeHybridArbitrator = CrepeHybridArbitrator(releaseFrames = HOLD_FRAMES)
     private var automaticStringState = AutomaticStringState(null, null, 0, null, "reset")
     private val inTuneCueGate = InTuneCueGate()
+    // UI-only visual verdict debouncer; detection and the cue gate never read it.
+    private val tuneVisualStabilizer = TuneVisualStabilizer()
     private val tinyCrepeShadow = TinyCrepeShadow.create(application)
     private val tinyCrepeMetrics = TinyCrepeShadowMetrics()
     private var pendingTinyCrepeResult: TinyCrepeResult? = null
@@ -116,9 +121,10 @@ class TunerViewModel(application: Application) : AndroidViewModel(application) {
         stopReferenceTone()
         _state.update { it.copy(mode = mode) }
         resetDetection()
-        // Pause capture on the metronome tab (so clicks aren't picked up), and
-        // resume it when returning to a tuning tab.
-        if (mode == TunerMode.METRONOME) {
+        // Pause capture on the metronome and ear-training tabs (so clicks /
+        // question playback aren't picked up), and resume it when returning to
+        // a tuning tab.
+        if (mode == TunerMode.METRONOME || mode == TunerMode.EAR_TRAINING) {
             stopListening()
         } else if (_state.value.hasPermission) {
             startListening()
@@ -231,11 +237,20 @@ class TunerViewModel(application: Application) : AndroidViewModel(application) {
         val target = resolveTuning(currentSettings.instrumentId, currentSettings.tuningId)
             ?.byNumber(selectedNumber) ?: return
         pianoReference.play(target.frequency)
+        // The reference is a single piano strike: reset the "playing" state once
+        // it has decayed, so the button flips back to 播放 by itself.
+        referenceToneJob?.cancel()
+        referenceToneJob = viewModelScope.launch {
+            delay(pianoReference.playDurationMillis(target.midi) + REFERENCE_TONE_TAIL_MS)
+            _state.update { it.copy(isReferenceTonePlaying = false) }
+        }
         _state.update { it.copy(isReferenceTonePlaying = true) }
     }
 
     fun stopReferenceTone() {
         pianoReference.stop()
+        referenceToneJob?.cancel()
+        referenceToneJob = null
         _state.update { it.copy(isReferenceTonePlaying = false) }
     }
 
@@ -291,6 +306,8 @@ class TunerViewModel(application: Application) : AndroidViewModel(application) {
         collectJob = null
         audioInput.stop()
         pianoReference.stop()
+        referenceToneJob?.cancel()
+        referenceToneJob = null
         _state.update { it.copy(isListening = false, isReferenceTonePlaying = false) }
         resetDetection()
     }
@@ -454,8 +471,15 @@ class TunerViewModel(application: Application) : AndroidViewModel(application) {
         val tracked = pitchTracker.submit(candidates, lockedString?.frequency, onset)
         if (tracked == null) {
             inTuneCueGate.observeInvalid()
+            tuneVisualStabilizer.observeInvalid()
             recordTinyCrepeFrame(null)
-            _state.update { it.copy(spectrum = spectrum, waveform = waveform) }
+            _state.update {
+                it.copy(
+                    spectrum = spectrum,
+                    waveform = waveform,
+                    visualState = tuneVisualStabilizer.currentState,
+                )
+            }
             return
         }
         val pitch = tracked.pitch
@@ -508,10 +532,16 @@ class TunerViewModel(application: Application) : AndroidViewModel(application) {
         } else {
             "chromatic:${s.temperament.name}:$midi"
         }
+        val tracking = phase == DetectionPhase.TRACKING
         val cueTriggered = inTuneCueGate.observe(
             target = cueTarget,
             cents = cents,
-            tracking = phase == DetectionPhase.TRACKING,
+            tracking = tracking,
+        )
+        val visualState = tuneVisualStabilizer.observe(
+            target = cueTarget,
+            cents = cents,
+            tracking = tracking,
         )
         val flashTick = _state.value.inTuneFlash + if (cueTriggered) 1 else 0
         if (cueTriggered) playInTuneCue()
@@ -535,6 +565,7 @@ class TunerViewModel(application: Application) : AndroidViewModel(application) {
                 spectrum = spectrum, waveform = waveform,
                 activeString = activeString,
                 inTuneFlash = flashTick,
+                visualState = visualState,
             )
         }
     }
@@ -550,6 +581,8 @@ class TunerViewModel(application: Application) : AndroidViewModel(application) {
         startedNanos: Long,
     ) {
         inTuneCueGate.observeInvalid()
+        tuneVisualStabilizer.observeInvalid()
+        val visualState = tuneVisualStabilizer.currentState
         if (activeDetectionEngine == DetectionEngine.CREPE_HYBRID) {
             crepeHybridArbitrator.observeMissing()
         }
@@ -570,9 +603,16 @@ class TunerViewModel(application: Application) : AndroidViewModel(application) {
                 spectrum = spectrum,
                 waveform = waveform,
                 activeString = if (it.mode == TunerMode.INSTRUMENT) it.selectedString else null,
+                visualState = visualState,
             ) }
         } else {
-            _state.update { it.copy(spectrum = spectrum, waveform = waveform) }
+            _state.update {
+                it.copy(
+                    spectrum = spectrum,
+                    waveform = waveform,
+                    visualState = visualState,
+                )
+            }
         }
         logFrame(null, 0.0, false, rms, reason, candidateCount, onset, startedNanos)
     }
@@ -624,6 +664,7 @@ class TunerViewModel(application: Application) : AndroidViewModel(application) {
                 "cueArmed=${inTuneCueGate.state.armed} " +
                 "cueCenter=${inTuneCueGate.state.centerFrames} " +
                 "cueFar=${inTuneCueGate.state.farFrames} " +
+                "visual=${tuneVisualStabilizer.currentState.name} " +
                 "crepeF=${tinyCrepe?.frequency?.let { "%.2f".format(it) }} " +
                 "crepeConf=${tinyCrepe?.confidence?.let { "%.2f".format(it) }} " +
                 "crepeMs=${tinyCrepe?.inferenceMs?.let { "%.1f".format(it) }} " +
@@ -661,6 +702,7 @@ class TunerViewModel(application: Application) : AndroidViewModel(application) {
         crepeHoldFrames = 0
         automaticStringState = AutomaticStringState(null, null, 0, null, "reset")
         inTuneCueGate.reset()
+        tuneVisualStabilizer.reset()
         pendingTinyCrepeResult = null
         pendingTinyCrepeRan = false
         missedFrames = 0
@@ -686,6 +728,7 @@ class TunerViewModel(application: Application) : AndroidViewModel(application) {
                 observedOctave = null,
                 spectrum = emptyList(),
                 activeString = if (it.mode == TunerMode.INSTRUMENT) it.selectedString else null,
+                visualState = TuneVisualState.WAITING,
             )
         }
     }
@@ -693,7 +736,7 @@ class TunerViewModel(application: Application) : AndroidViewModel(application) {
     override fun onCleared() {
         tinyCrepeShadow?.close()
         cueSound.close()
-        pianoReference.close()
+        PianoEngineShare.release(pianoReference)
         stopListening()
         super.onCleared()
     }
@@ -711,6 +754,7 @@ class TunerViewModel(application: Application) : AndroidViewModel(application) {
         const val CREPE_VALIDATION_INTERVAL = 8 // ~0.37s between background CREPE checks
         const val CREPE_HOLD_FRAMES = 8         // frames to keep CREPE on after a veto
         const val CUE_MUTE_MS = 700L            // freeze detection while the cue plays (asset ~560ms + tail)
+        const val REFERENCE_TONE_TAIL_MS = 250L // extra silence after the reference strike decays
         const val LOG_EVERY = 10L     // throttle debug logging
     }
 }

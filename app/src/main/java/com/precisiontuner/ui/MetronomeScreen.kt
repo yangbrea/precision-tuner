@@ -38,6 +38,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -57,6 +59,7 @@ fun MetronomeScreen(
 ) {
     var showTimePicker by remember { mutableStateOf(false) }
     var showSubdivisionPicker by remember { mutableStateOf(false) }
+    val haptics = LocalHapticFeedback.current
     val subdivisionLabel = when (state.subdivision) {
         2 -> "八分"
         3 -> "三连音"
@@ -64,25 +67,44 @@ fun MetronomeScreen(
         else -> "无"
     }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(horizontal = 24.dp, vertical = 10.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
-        MetronomeRing(
-            bpm = state.bpm,
-            beatsPerBar = state.beatsPerBar,
-            noteValue = state.noteValue,
-            subdivision = state.subdivision,
-            isPlaying = state.isPlaying,
-            currentBeat = state.currentBeat,
-            modifier = Modifier.size(216.dp),
+    Box(modifier = Modifier.fillMaxSize()) {
+        NeonScreenBackground(
+            active = state.isPlaying,
+            pulseTick = state.currentBeat,
         )
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 20.dp, vertical = 10.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            Text(
+                text = if (state.isPlaying) "LIVE TEMPO" else "TEMPO LAB",
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.primary,
+                letterSpacing = 2.sp,
+            )
+            Spacer(Modifier.height(6.dp))
+            NeonPanel(
+                highlighted = state.isPlaying,
+                modifier = Modifier.size(248.dp),
+            ) {
+                MetronomeRing(
+                    bpm = state.bpm,
+                    beatsPerBar = state.beatsPerBar,
+                    noteValue = state.noteValue,
+                    subdivision = state.subdivision,
+                    isPlaying = state.isPlaying,
+                    currentBeat = state.currentBeat,
+                    onSetBpm = onSetBpm,
+                    modifier = Modifier.fillMaxSize().padding(10.dp),
+                )
+            }
 
-        Spacer(Modifier.height(6.dp))
+            Spacer(Modifier.height(6.dp))
         // BPM: ±1 / ±10 / slider.
-        Row(verticalAlignment = Alignment.CenterVertically) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = { onSetBpm(state.bpm - 1) }) {
                 Icon(Icons.Filled.Remove, contentDescription = "减慢")
             }
@@ -101,58 +123,74 @@ fun MetronomeScreen(
             IconButton(onClick = { onSetBpm(state.bpm + 1) }) {
                 Icon(Icons.Filled.Add, contentDescription = "加快")
             }
-        }
+            }
 
         // BPM presets.
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            listOf(60, 90, 120, 160).forEach { preset ->
-                Chip(label = preset.toString(), selected = state.bpm == preset, onClick = { onSetBpm(preset) })
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                listOf(60, 90, 120, 160).forEach { preset ->
+                    Chip(label = preset.toString(), selected = state.bpm == preset, onClick = { onSetBpm(preset) })
+                }
             }
-        }
 
-        Spacer(Modifier.height(8.dp))
+            Spacer(Modifier.height(8.dp))
         // Time signature and subdivision: two separate pickers on one row.
         // Both stay open after a change; the user closes them (tap outside/back).
-        Row(
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            PickerSegment(
-                label = "每小节 ${state.beatsPerBar}/${state.noteValue}",
-                onClick = { showTimePicker = true },
-            )
-            PickerSegment(
-                label = "细分: $subdivisionLabel",
-                onClick = { showSubdivisionPicker = true },
-            )
-        }
+            NeonPanel(modifier = Modifier.fillMaxWidth()) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 6.dp, vertical = 2.dp),
+                    horizontalArrangement = Arrangement.SpaceEvenly,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    PickerSegment(
+                        label = "${state.beatsPerBar}/${state.noteValue} 拍",
+                        onClick = {
+                            haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                            showTimePicker = true
+                        },
+                    )
+                    PickerSegment(
+                        label = "细分 $subdivisionLabel",
+                        onClick = {
+                            haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                            showSubdivisionPicker = true
+                        },
+                    )
+                }
+            }
 
-        Spacer(Modifier.height(8.dp))
+            Spacer(Modifier.height(8.dp))
         // TAP + accent toggle on one row.
-        Row(
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            OutlinedButton(onClick = onTap) { Text("TAP 节拍") }
-            Chip(
-                label = if (state.accentEnabled) "重音拍 开" else "重音拍 关",
-                selected = state.accentEnabled,
-                onClick = { onSetAccent(!state.accentEnabled) },
-            )
-        }
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                OutlinedButton(onClick = {
+                    haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                    onTap()
+                }) { Text("TAP 节拍") }
+                Chip(
+                    label = if (state.accentEnabled) "重音拍 开" else "重音拍 关",
+                    selected = state.accentEnabled,
+                    onClick = { onSetAccent(!state.accentEnabled) },
+                )
+            }
 
-        Spacer(Modifier.weight(1f))
+            Spacer(Modifier.weight(1f))
 
         // Start / stop.
-        FilledIconButton(
-            onClick = onToggle,
-            modifier = Modifier.size(88.dp),
-        ) {
-            Icon(
-                imageVector = if (state.isPlaying) Icons.Filled.Stop else Icons.Filled.PlayArrow,
-                contentDescription = if (state.isPlaying) "停止" else "开始",
-                modifier = Modifier.size(40.dp),
-            )
+            FilledIconButton(
+                onClick = {
+                    haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                    onToggle()
+                },
+                modifier = Modifier.size(88.dp),
+            ) {
+                Icon(
+                    imageVector = if (state.isPlaying) Icons.Filled.Stop else Icons.Filled.PlayArrow,
+                    contentDescription = if (state.isPlaying) "停止" else "开始",
+                    modifier = Modifier.size(40.dp),
+                )
+            }
         }
     }
 

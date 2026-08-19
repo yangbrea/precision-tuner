@@ -1,11 +1,20 @@
 package com.precisiontuner
 
 import com.precisiontuner.ui.beatAngle
+import com.precisiontuner.ui.bpmFromVerticalDrag
 import com.precisiontuner.ui.nodeLit
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
 class MetronomeRingTest {
+
+    @Test
+    fun `vertical drag adjusts one BPM per step and clamps`() {
+        assertEquals(121, bpmFromVerticalDrag(120, -12f, 12f))
+        assertEquals(119, bpmFromVerticalDrag(120, 12f, 12f))
+        assertEquals(300, bpmFromVerticalDrag(299, -120f, 12f))
+        assertEquals(30, bpmFromVerticalDrag(31, 120f, 12f))
+    }
 
     @Test
     fun `beat angles are evenly spaced clockwise from the top`() {

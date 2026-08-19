@@ -1,14 +1,29 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Install the Tuner debug build over USB (or any connected adb device).
+#
+# The AI-assisted CREPE engine is a default feature: the build bundles the
+# small TFLite model unless explicitly hidden.
+#
+# Usage:
+#   ./install-device.sh                                  # auto-detect the single USB device
+#   ./install-device.sh DEVICE_SERIAL                    # install to a specific device
+#   ./install-device.sh DEVICE_SERIAL --no-crepe         # DSP-only build (all ABIs, no model)
+#   ./install-device.sh DEVICE_SERIAL --tiny-crepe       # explicit CREPE build (default)
+#
+# The CREPE build is arm64-only (see app/build.gradle.kts).
+
 project_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 apk_path="$project_dir/app/build/outputs/apk/debug/app-debug.apk"
 package_name="com.precisiontuner"
 requested_serial=""
-tiny_crepe_enabled=false
+# CREPE is on by default; --no-crepe hides it.
+tiny_crepe_enabled=true
 for argument in "$@"; do
     case "$argument" in
         --tiny-crepe) tiny_crepe_enabled=true ;;
+        --no-crepe) tiny_crepe_enabled=false ;;
         *)
             if [[ -n "$requested_serial" ]]; then
                 echo "错误：无法识别参数 $argument" >&2
@@ -55,7 +70,11 @@ if [[ "$tiny_crepe_enabled" == true ]]; then
     gradle_args=(-PtinyCrepeEnabled=true assembleDebug)
 fi
 
-echo "构建 Debug APK（Tiny CREPE model=$tiny_crepe_enabled）..."
+if [[ "$tiny_crepe_enabled" == true ]]; then
+    echo "构建 Debug APK（含 CREPE 模型）..."
+else
+    echo "构建 Debug APK（DSP-only，不含 CREPE）..."
+fi
 GRADLE_USER_HOME="$project_dir/.gradle-home" \
     "$project_dir/gradlew" -p "$project_dir" "${gradle_args[@]}"
 

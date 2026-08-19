@@ -24,6 +24,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.precisiontuner.TuneVisualState
 import com.precisiontuner.TunerState
 import com.precisiontuner.settings.AppSettings
 import com.precisiontuner.settings.GaugeStyle
@@ -38,12 +39,19 @@ fun ChromaticScreen(
     onTemperamentChange: (Temperament) -> Unit,
     onReferenceChange: (Double) -> Unit,
 ) {
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(start = 20.dp, end = 20.dp, top = 8.dp, bottom = 24.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
+    Box(modifier = Modifier.fillMaxSize()) {
+        NeonScreenBackground(
+            cents = state.cents,
+            active = state.cents != null,
+            pulseTick = state.inTuneFlash,
+            visualState = state.visualState,
+        )
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(start = 20.dp, end = 20.dp, top = 8.dp, bottom = 24.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
         Text(
             text = "${settings.temperament.label} · A4 = ${state.referenceA4.roundToInt()} Hz",
             fontSize = 16.sp,
@@ -52,6 +60,10 @@ fun ChromaticScreen(
 
         Spacer(Modifier.height(8.dp))
         TemperamentRow(selected = settings.temperament, onSelect = onTemperamentChange)
+
+        // The dial is tall, so it needs a smaller gauge + spectrum to leave the
+        // A4 reference panel breathing room at the bottom (never squeezed).
+        val dial = settings.gaugeStyle == GaugeStyle.DIAL
 
         Spacer(Modifier.height(10.dp))
         Readout(
@@ -63,16 +75,24 @@ fun ChromaticScreen(
             observedNoteName = state.observedNoteName,
             observedOctave = state.observedOctave,
             flashTick = state.inTuneFlash,
+            visualState = state.visualState,
         )
 
-        TunerGauge(
-            cents = state.cents,
-            flashTick = state.inTuneFlash,
-            style = settings.gaugeStyle,
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(if (settings.gaugeStyle == GaugeStyle.DIAL) 188.dp else 112.dp),
-        )
+            NeonPanel(
+                highlighted = state.visualState == TuneVisualState.IN_TUNE,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                TunerGauge(
+                    cents = state.cents,
+                    flashTick = state.inTuneFlash,
+                    style = settings.gaugeStyle,
+                    visualState = state.visualState,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(if (dial) 172.dp else 118.dp)
+                        .padding(horizontal = 6.dp),
+                )
+            }
 
         Spacer(Modifier.height(2.dp))
         if (settings.visualMode == VisualMode.WAVEFORM) {
@@ -80,7 +100,7 @@ fun ChromaticScreen(
                 waveform = state.waveform,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(56.dp),
+                    .height(if (dial) 44.dp else 56.dp),
             )
         } else {
             SpectrumView(
@@ -88,12 +108,12 @@ fun ChromaticScreen(
                 detectedFrequency = state.detectedFrequency,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(56.dp),
+                    .height(if (dial) 44.dp else 56.dp),
             )
         }
 
         Spacer(
-            modifier = if (settings.gaugeStyle == GaugeStyle.DIAL) {
+            modifier = if (dial) {
                 Modifier.weight(1f) // tall dial: pin the reference block to the bottom
             } else {
                 Modifier.height(16.dp) // short rail: keep it right under the spectrum
@@ -102,28 +122,35 @@ fun ChromaticScreen(
 
         // A4 reference pitch. The live A4 value is already shown in the header
         // ("· A4 = 440 Hz"), so the slider only needs its centered label.
-        Column(modifier = Modifier.fillMaxWidth()) {
-            Text(
-                text = "基准音 A4（默认 440 Hz）",
-                fontSize = 13.sp,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                textAlign = TextAlign.Center,
-                modifier = Modifier.fillMaxWidth(),
-            )
-            Slider(
-                value = state.referenceA4.toFloat(),
-                onValueChange = { onReferenceChange(it.toDouble()) },
-                valueRange = 415f..466f,
-                steps = 50, // one step per Hz
-            )
-        }
+            NeonPanel(modifier = Modifier.fillMaxWidth()) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 14.dp, vertical = if (dial) 10.dp else 8.dp),
+                ) {
+                    Text(
+                        text = "REFERENCE · A4 ${state.referenceA4.roundToInt()} Hz",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    Spacer(Modifier.height(if (dial) 10.dp else 6.dp))
+                    Slider(
+                        value = state.referenceA4.toFloat(),
+                        onValueChange = { onReferenceChange(it.toDouble()) },
+                        valueRange = 415f..466f,
+                        steps = 50,
+                    )
+                }
+            }
 
         // Keep the reference controls visually separate from the persistent
         // navigation bar. The larger dial consumes most of the flexible space,
         // so it needs an explicit gap instead of relying on Spacer(weight).
-        Spacer(
-            Modifier.height(if (settings.gaugeStyle == GaugeStyle.DIAL) 20.dp else 8.dp),
-        )
+            Spacer(Modifier.height(if (dial) 8.dp else 6.dp))
+        }
     }
 }
 
