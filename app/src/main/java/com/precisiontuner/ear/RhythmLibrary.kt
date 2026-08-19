@@ -5,23 +5,18 @@ package com.precisiontuner.ear
  *
  * Durations use the 1/12-beat grid of [RhythmPattern]: quarter = 12, eighth
  * = 6, sixteenth = 3, triplet = 4, dotted values = 18/9/36, half = 24,
- * whole = 48. Every pattern sums to 48 (one 4/4 bar) except the documented
- * two-beat `TRIPLETS`. Every pattern has at least 3 audible notes (≥2
- * inter-onset intervals) so a reproduction always has discriminating power,
- * and pools keep at least 4 entries so repeat-avoidance works.
+ * whole = 48. Every pattern sums to its time-signature bar (48×a/b grid
+ * units), has at least 3 audible notes (≥2 inter-onset intervals) and —
+ * crucially — contains a length contrast (≥2 distinct intervals), so no
+ * pattern reduces to "tap evenly N times". Pools keep plenty of entries for
+ * repeat-avoidance.
  */
 object RhythmLibrary {
 
-    // ---- 简单: quarters, halves, eighths, simple rests ------------------
+    // ---- 简单: quarters, halves, eighths, simple rests, basic dots --------
 
     /** 二分与四分 — half then two quarters. */
     val HALF_QUARTER = RhythmPattern("二分与四分", notes = listOf(n(24), n(12), n(12)))
-
-    /** 四分节奏 — four quarters. */
-    val QUARTERS = RhythmPattern("四分节奏", notes = listOf(n(12), n(12), n(12), n(12)))
-
-    /** 八分节奏 — eight eighths. */
-    val EIGHTHS = RhythmPattern("八分节奏", notes = List(8) { n(6) })
 
     /** 四分与八分 — quarter, two eighths, quarter, quarter. */
     val QUARTER_EIGHTH = RhythmPattern(
@@ -53,10 +48,10 @@ object RhythmLibrary {
         notes = listOf(n(6), n(24, isRest = true), n(6), n(12)),
     )
 
-    /** 八分与二分 — four eighths then a half. */
+    /** 八分与二分 — three eighths, half, eighth. */
     val EIGHTH_HALF = RhythmPattern(
         "八分与二分",
-        notes = listOf(n(6), n(6), n(6), n(6), n(24)),
+        notes = listOf(n(6), n(6), n(6), n(24), n(6)),
     )
 
     /** 四分与附点 — two quarters, dotted quarter + eighth. */
@@ -65,34 +60,16 @@ object RhythmLibrary {
         notes = listOf(n(12), n(12), n(18), n(6)),
     )
 
-    // ---- 3/4 与 2/4（简单） ----------------------------------------------
-
-    /** 三拍四分 — three quarters in 3/4. */
-    val THREE_FOUR_QUARTERS = RhythmPattern(
-        "三拍四分",
-        beatsPerBar = 3,
-        notes = listOf(n(12), n(12), n(12)),
+    /** 附点与二分 — dotted quarter + eighth, then a half. */
+    val DOTTED_HALF = RhythmPattern(
+        "附点与二分",
+        notes = listOf(n(18), n(6), n(24)),
     )
 
-    /** 三拍二分与八分 — half then two eighths in 3/4. */
-    val THREE_FOUR_HALF_EIGHTH = RhythmPattern(
-        "三拍二分与八分",
-        beatsPerBar = 3,
-        notes = listOf(n(24), n(6), n(6)),
-    )
-
-    /** 三拍八分 — six eighths in 3/4. */
-    val THREE_FOUR_EIGHTHS = RhythmPattern(
-        "三拍八分",
-        beatsPerBar = 3,
-        notes = List(6) { n(6) },
-    )
-
-    /** 两拍八分 — four eighths in 2/4. */
-    val TWO_FOUR_EIGHTHS = RhythmPattern(
-        "两拍八分",
-        beatsPerBar = 2,
-        notes = List(4) { n(6) },
+    /** 四分与二分 — quarter, two eighths, half. */
+    val QUARTER_HALF_EIGHTH = RhythmPattern(
+        "四分与二分",
+        notes = listOf(n(12), n(6), n(6), n(24)),
     )
 
     /** 两拍四分与八分 — quarter, two eighths in 2/4. */
@@ -102,11 +79,17 @@ object RhythmLibrary {
         notes = listOf(n(12), n(6), n(6)),
     )
 
+    /** 两拍八分与四分 — eighth, quarter, eighth in 2/4. */
+    val TWO_FOUR_EIGHTH_QUARTER = RhythmPattern(
+        "两拍八分与四分",
+        beatsPerBar = 2,
+        notes = listOf(n(6), n(12), n(6)),
+    )
+
     val EASY: List<RhythmPattern> = listOf(
-        HALF_QUARTER, QUARTERS, EIGHTHS, QUARTER_EIGHTH, DOTTED_HALF_EIGHTH,
-        QUARTER_REST, EIGHTH_QUARTER, HALF_REST, EIGHTH_HALF, QUARTER_DOTTED,
-        THREE_FOUR_QUARTERS, THREE_FOUR_HALF_EIGHTH, THREE_FOUR_EIGHTHS,
-        TWO_FOUR_EIGHTHS, TWO_FOUR_QUARTER_EIGHTH,
+        HALF_QUARTER, QUARTER_EIGHTH, DOTTED_HALF_EIGHTH, QUARTER_REST,
+        EIGHTH_QUARTER, HALF_REST, EIGHTH_HALF, QUARTER_DOTTED, DOTTED_HALF,
+        QUARTER_HALF_EIGHTH, TWO_FOUR_QUARTER_EIGHTH, TWO_FOUR_EIGHTH_QUARTER,
     )
 
     // ---- 中等: dotted eighths, syncopation, sixteenths, triplets ---------
@@ -141,12 +124,6 @@ object RhythmLibrary {
         notes = listOf(n(6), n(6, isRest = true), n(6), n(6), n(6), n(6), n(6), n(6)),
     )
 
-    /** 三连音两拍 — two beats of straight triplets. */
-    val TRIPLETS = RhythmPattern(
-        "三连音两拍",
-        notes = List(6) { n(4) },
-    )
-
     /** 附点八分与四分 — dotted eighth + sixteenth, then three quarters. */
     val DOTTED_SIXTEENTH = RhythmPattern(
         "附点八分与四分",
@@ -171,10 +148,10 @@ object RhythmLibrary {
         notes = listOf(n(4), n(4), n(4), n(12), n(12), n(12)),
     )
 
-    /** 带休止的切分 — syncopation framed by eighth rests. */
+    /** 带休止的切分 — syncopation framed by an eighth rest. */
     val SYNCOPATED_REST = RhythmPattern(
         "带休止的切分",
-        notes = listOf(n(6), n(6, isRest = true), n(12), n(6), n(6, isRest = true), n(12)),
+        notes = listOf(n(6), n(6, isRest = true), n(12), n(6), n(6), n(12)),
     )
 
     /** 附点与八分 — dotted quarter + eighth, then an eighth run. */
@@ -183,7 +160,29 @@ object RhythmLibrary {
         notes = listOf(n(18), n(6), n(6), n(6), n(6), n(6)),
     )
 
-    // ---- 3/4 与 6/8（中等） ----------------------------------------------
+    /** 切分与附点 — syncopation into a dotted quarter + eighth. */
+    val SYNCOPATED_DOTTED = RhythmPattern(
+        "切分与附点",
+        notes = listOf(n(6), n(18), n(6), n(6), n(12)),
+    )
+
+    /** 十六分组合 — sixteenth pick-ups in both directions. */
+    val SIXTEENTH_COMBO = RhythmPattern(
+        "十六分组合",
+        notes = listOf(n(3), n(3), n(6), n(3), n(3), n(6), n(12), n(12)),
+    )
+
+    /** 八分与三连音 — eighths framing a triplet group. */
+    val EIGHTH_TRIPLET = RhythmPattern(
+        "八分与三连音",
+        notes = listOf(n(6), n(4), n(4), n(4), n(6), n(12), n(12)),
+    )
+
+    /** 附点八分与切分 — dotted-eighth pick-up into a syncopation. */
+    val DOTTED_SIXTEENTH_SYNCOPATED = RhythmPattern(
+        "附点八分与切分",
+        notes = listOf(n(9), n(3), n(6), n(12), n(6), n(12)),
+    )
 
     /** 三拍附点 — dotted quarter + eighth, quarter in 3/4. */
     val THREE_FOUR_DOTTED = RhythmPattern(
@@ -216,9 +215,10 @@ object RhythmLibrary {
 
     val MEDIUM: List<RhythmPattern> = listOf(
         DOTTED_EIGHTH, SYNCOPATED, EIGHTH_TWO_SIXTEENTHS,
-        TWO_SIXTEENTHS_EIGHTH, EIGHTH_REST, TRIPLETS, DOTTED_SIXTEENTH,
+        TWO_SIXTEENTHS_EIGHTH, EIGHTH_REST, DOTTED_SIXTEENTH,
         SYNCOPATED_EIGHTH, SIXTEENTH_SYNCOPATED, TRIPLET_QUARTER,
-        SYNCOPATED_REST, DOTTED_EIGHTH_RUN,
+        SYNCOPATED_REST, DOTTED_EIGHTH_RUN, SYNCOPATED_DOTTED,
+        SIXTEENTH_COMBO, EIGHTH_TRIPLET, DOTTED_SIXTEENTH_SYNCOPATED,
         THREE_FOUR_DOTTED, THREE_FOUR_SYNCOPATED, THREE_FOUR_DOTTED_EIGHTH,
         SIX_EIGHT_QUARTER_EIGHTH,
     )
@@ -249,16 +249,10 @@ object RhythmLibrary {
         notes = listOf(n(18), n(6), n(6), n(6), n(12)),
     )
 
-    /** 复杂休止 — quarter, eighth rest, eighth, quarter rest, quarter. */
+    /** 复杂休止 — quarter, quarter rest, eighth, eighth rest, quarter. */
     val COMPLEX_REST = RhythmPattern(
         "复杂休止",
-        notes = listOf(n(12), n(6, isRest = true), n(6), n(12, isRest = true), n(12)),
-    )
-
-    /** 全十六分 — sixteen straight sixteenths. */
-    val ALL_SIXTEENTHS = RhythmPattern(
-        "全十六分",
-        notes = List(16) { n(3) },
+        notes = listOf(n(12), n(12, isRest = true), n(6), n(6, isRest = true), n(12)),
     )
 
     /** 十六分与附点 — sixteenth run, dotted quarter + eighth, quarter. */
@@ -285,19 +279,41 @@ object RhythmLibrary {
         notes = listOf(n(3), n(6), n(3), n(6), n(12), n(6), n(12)),
     )
 
-    /** 全三连音 — a whole bar of straight triplets. */
-    val ALL_TRIPLETS = RhythmPattern(
-        "全三连音",
-        notes = List(12) { n(4) },
-    )
-
     /** 附点与十六分 — dotted pairs alternating with sixteenths. */
     val DOTTED_SIXTEENTH_RUN = RhythmPattern(
         "附点与十六分",
         notes = listOf(n(18), n(3), n(3), n(6), n(18)),
     )
 
-    // ---- 3/4 与 6/8（困难） ----------------------------------------------
+    /** 十六分切分 — sixteenth syncopation between eighths. */
+    val SIXTEENTH_SYNCOPATION = RhythmPattern(
+        "十六分切分",
+        notes = listOf(n(6), n(3), n(6), n(3), n(6), n(12), n(12)),
+    )
+
+    /** 跨拍十六分 — sixteenth groups crossing beat boundaries. */
+    val CROSS_BAR_SIXTEENTH = RhythmPattern(
+        "跨拍十六分",
+        notes = listOf(n(3), n(3), n(6), n(12), n(3), n(3), n(6), n(12)),
+    )
+
+    /** 三连音切分 — triplets intertwined with syncopation. */
+    val TRIPLET_SYNCOPATION = RhythmPattern(
+        "三连音切分",
+        notes = listOf(n(6), n(4), n(4), n(4), n(6), n(4), n(4), n(4), n(12)),
+    )
+
+    /** 附点十六分连奏 — dotted-sixteenth runs across the bar. */
+    val DOTTED_SIXTEENTH_LEGATO = RhythmPattern(
+        "附点十六分连奏",
+        notes = listOf(n(3), n(3), n(3), n(18), n(6), n(3), n(3), n(6), n(3)),
+    )
+
+    /** 带休止的十六分切分 — sixteenth syncopation with rests. */
+    val SIXTEENTH_REST_SYNCOPATED = RhythmPattern(
+        "带休止的十六分切分",
+        notes = listOf(n(3), n(3, isRest = true), n(6), n(3), n(6), n(12), n(3), n(6), n(6)),
+    )
 
     /** 三拍十六分 — sixteenth run then eighths in 3/4. */
     val THREE_FOUR_SIXTEENTHS = RhythmPattern(
@@ -313,13 +329,6 @@ object RhythmLibrary {
         notes = listOf(n(6), n(12), n(3), n(3), n(12)),
     )
 
-    /** 三拍三连音 — a full bar of triplets in 3/4. */
-    val THREE_FOUR_TRIPLETS = RhythmPattern(
-        "三拍三连音",
-        beatsPerBar = 3,
-        notes = List(9) { n(4) },
-    )
-
     /** 六八切分 — syncopation across the two dotted beats of 6/8. */
     val SIX_EIGHT_SYNCOPATED = RhythmPattern(
         "六八切分",
@@ -330,10 +339,12 @@ object RhythmLibrary {
 
     val HARD: List<RhythmPattern> = listOf(
         SYNCOPATED_COMBO, SIXTEENTH_RUN, TRIPLET_EIGHTH, DOTTED_SYNCOPATION,
-        COMPLEX_REST, ALL_SIXTEENTHS, SIXTEENTH_DOTTED, SYNCOPATED_TRIPLET,
-        SIXTEENTH_REST, COMPLEX_SYNCOPATION, ALL_TRIPLETS, DOTTED_SIXTEENTH_RUN,
+        COMPLEX_REST, SIXTEENTH_DOTTED, SYNCOPATED_TRIPLET,
+        SIXTEENTH_REST, COMPLEX_SYNCOPATION, DOTTED_SIXTEENTH_RUN,
+        SIXTEENTH_SYNCOPATION, CROSS_BAR_SIXTEENTH, TRIPLET_SYNCOPATION,
+        DOTTED_SIXTEENTH_LEGATO, SIXTEENTH_REST_SYNCOPATED,
         THREE_FOUR_SIXTEENTHS, THREE_FOUR_COMPLEX_SYNCOPATION,
-        THREE_FOUR_TRIPLETS, SIX_EIGHT_SYNCOPATED,
+        SIX_EIGHT_SYNCOPATED,
     )
 
     private fun n(grids: Int, isRest: Boolean = false) = RhythmNote(grids, isRest)

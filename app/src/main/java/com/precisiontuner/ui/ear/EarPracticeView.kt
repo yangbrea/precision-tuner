@@ -3,6 +3,7 @@ package com.precisiontuner.ui.ear
 import android.os.SystemClock
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.animateIntAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -38,12 +39,14 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalHapticFeedback
@@ -156,12 +159,17 @@ fun EarPracticeView(
 
         if (exerciseType == ExerciseType.RHYTHM) {
             val pattern = question.rhythmPattern ?: return
-            RhythmRecorder(
-                expectedTaps = pattern.expectedTaps,
-                answered = answered,
-                onSubmit = onRhythmSubmit,
-                onTap = onRhythmTap,
-            )
+            // Key the recorder to the question so its tap state (taps,
+            // recording, start time) resets on the next question instead of
+            // leaking from the previous one.
+            key(question) {
+                RhythmRecorder(
+                    expectedTaps = pattern.expectedTaps,
+                    answered = answered,
+                    onSubmit = onRhythmSubmit,
+                    onTap = onRhythmTap,
+                )
+            }
         } else {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 for (row in 0 until 2) {
@@ -235,14 +243,18 @@ private fun RhythmRecorder(
     var recording by remember { mutableStateOf(false) }
     var taps by remember { mutableStateOf<List<Long>>(emptyList()) }
     var startNanos by remember { mutableStateOf(0L) }
-
-    // A new question (or an answer settling) resets the recorder.
-    LaunchedEffect(answered) {
-        if (answered) {
-            recording = false
-            taps = emptyList()
+    // Elastic pulse on every tap.
+    val pulse = remember { Animatable(1f) }
+    LaunchedEffect(taps.size) {
+        if (taps.isNotEmpty()) {
+            pulse.snapTo(0.88f)
+            pulse.animateTo(1f, tween(140))
         }
     }
+
+    // Once the answer has settled the whole recorder disappears: no "哒",
+    // no 重录, no 开始复现 — only the feedback banner and 下一题 remain.
+    if (answered) return
 
     Column(
         modifier = Modifier.fillMaxWidth(),
@@ -278,6 +290,10 @@ private fun RhythmRecorder(
             Box(
                 modifier = Modifier
                     .size(116.dp)
+                    .graphicsLayer {
+                        scaleX = pulse.value
+                        scaleY = pulse.value
+                    }
                     .clip(CircleShape)
                     .background(accent)
                     .semantics { role = Role.Button }

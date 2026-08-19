@@ -88,21 +88,20 @@ fun RhythmStaffView(pattern: RhythmPattern, modifier: Modifier = Modifier) {
             fontSize = (emPx / (density * fontScale)).sp,
         )
 
-        // Time signature (plain text, left of the notes).
-        val timeSigLayout = textMeasurer.measure(
-            text = AnnotatedString("${pattern.beatsPerBar}/${pattern.beatUnit}"),
-            style = TextStyle(
-                color = inkColor,
-                fontSize = 13.sp,
-                fontWeight = FontWeight.Bold,
-            ),
+        // Time signature: Bravura SMuFL numerals stacked vertically (standard
+        // notation) — numerator above the middle line, denominator below.
+        val timeSigX = left + gap * 1.2f
+        drawGlyphCentered(
+            timeSigDigitGlyph(pattern.beatsPerBar),
+            Offset(timeSigX, centerY - gap),
+            textMeasurer,
+            musicStyle,
         )
-        drawText(
-            textLayoutResult = timeSigLayout,
-            topLeft = Offset(
-                left + gap * 1.2f,
-                centerY - timeSigLayout.size.height / 2f,
-            ),
+        drawGlyphCentered(
+            timeSigDigitGlyph(pattern.beatUnit),
+            Offset(timeSigX, centerY + gap),
+            textMeasurer,
+            musicStyle,
         )
 
         // Runs of consecutive equal short notes (eighth or sixteenth runs)
@@ -157,15 +156,15 @@ fun RhythmStaffView(pattern: RhythmPattern, modifier: Modifier = Modifier) {
 
         // Beams sit on the stem tops (glyph bbox yMax ≈ 0.875 em above the
         // notehead centre). Per VexFlow: beam thickness ≈ 0.5 staff space
-        // (0.11 em), layer spacing = 1.5 × thickness, and the beam overhangs
-        // each outermost stem by about one third of a notehead.
+        // (0.11 em) and layer spacing = 1.5 × thickness. The beam ends flush
+        // with the outermost stems (no overhang), so it never reaches past the
+        // noteheads.
         val beamTopY = centerY - STEM_TOP_EM * emPx
         val beamThickness = 0.11f * emPx
         val beamLayerSpacing = 0.16f * emPx
-        val overhang = 0.10f * emPx
         beamGroups.forEach { (start, end, beams) ->
-            val fromX = centerX(onsets[start], notes[start].grids) + STEM_X_EM * emPx - overhang
-            val toX = centerX(onsets[end], notes[end].grids) + STEM_X_EM * emPx + overhang
+            val fromX = centerX(onsets[start], notes[start].grids) + STEM_X_EM * emPx
+            val toX = centerX(onsets[end], notes[end].grids) + STEM_X_EM * emPx
             for (beam in 0 until beams) {
                 val y = beamTopY + beam * beamLayerSpacing
                 drawLine(inkColor, Offset(fromX, y), Offset(toX, y), beamThickness, StrokeCap.Round)
@@ -245,6 +244,12 @@ private fun noteGlyph(grids: Int): String = when (grids) {
     else -> UNICODE_QUARTER_NOTE // 18, 12, 4 and anything else
 }
 
+/** SMuFL time-signature numeral glyph (U+E080 + digit). */
+private fun timeSigDigitGlyph(digit: Int): String {
+    val clamped = digit.coerceIn(0, 9)
+    return String(Character.toChars(SMUFL_TIME_SIG_0 + clamped))
+}
+
 private fun restGlyph(grids: Int): String = when (grids) {
     48 -> UNICODE_WHOLE_REST
     24 -> UNICODE_HALF_REST
@@ -272,3 +277,4 @@ private const val UNICODE_QUARTER_REST = "\uD834\uDD3D" // U+1D13D
 private const val UNICODE_EIGHTH_REST = "\uD834\uDD3E" // U+1D13E
 private const val UNICODE_SIXTEENTH_REST = "\uD834\uDD3F" // U+1D13F
 private const val UNICODE_AUGMENTATION_DOT = "\uD834\uDD6D" // U+1D16D
+private const val SMUFL_TIME_SIG_0 = 0xE080 // SMuFL timeSig0 .. timeSig9

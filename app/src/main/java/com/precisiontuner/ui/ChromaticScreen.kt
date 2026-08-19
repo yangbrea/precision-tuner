@@ -27,8 +27,8 @@ import androidx.compose.ui.unit.sp
 import com.precisiontuner.TuneVisualState
 import com.precisiontuner.TunerState
 import com.precisiontuner.settings.AppSettings
-import com.precisiontuner.settings.GaugeStyle
 import com.precisiontuner.settings.VisualMode
+import com.precisiontuner.settings.isTall
 import com.precisiontuner.tuning.Temperament
 import kotlin.math.roundToInt
 
@@ -61,9 +61,10 @@ fun ChromaticScreen(
         Spacer(Modifier.height(8.dp))
         TemperamentRow(selected = settings.temperament, onSelect = onTemperamentChange)
 
-        // The dial is tall, so it needs a smaller gauge + spectrum to leave the
-        // A4 reference panel breathing room at the bottom (never squeezed).
-        val dial = settings.gaugeStyle == GaugeStyle.DIAL
+        // Dial-style gauges (dial / trail) are tall, so they need a smaller
+        // gauge + spectrum to leave the A4 reference panel breathing room at the
+        // bottom (never squeezed).
+        val tall = settings.gaugeStyle.isTall
 
         Spacer(Modifier.height(10.dp))
         Readout(
@@ -89,7 +90,7 @@ fun ChromaticScreen(
                     visualState = state.visualState,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(if (dial) 172.dp else 118.dp)
+                        .height(if (tall) 172.dp else 118.dp)
                         .padding(horizontal = 6.dp),
                 )
             }
@@ -100,7 +101,7 @@ fun ChromaticScreen(
                 waveform = state.waveform,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(if (dial) 44.dp else 56.dp),
+                    .height(if (tall) 44.dp else 56.dp),
             )
         } else {
             SpectrumView(
@@ -108,12 +109,12 @@ fun ChromaticScreen(
                 detectedFrequency = state.detectedFrequency,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(if (dial) 44.dp else 56.dp),
+                    .height(if (tall) 44.dp else 56.dp),
             )
         }
 
         Spacer(
-            modifier = if (dial) {
+            modifier = if (tall) {
                 Modifier.weight(1f) // tall dial: pin the reference block to the bottom
             } else {
                 Modifier.height(16.dp) // short rail: keep it right under the spectrum
@@ -126,7 +127,7 @@ fun ChromaticScreen(
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 14.dp, vertical = if (dial) 10.dp else 8.dp),
+                        .padding(horizontal = 14.dp, vertical = if (tall) 10.dp else 8.dp),
                 ) {
                     Text(
                         text = "REFERENCE · A4 ${state.referenceA4.roundToInt()} Hz",
@@ -136,7 +137,7 @@ fun ChromaticScreen(
                         textAlign = TextAlign.Center,
                         modifier = Modifier.fillMaxWidth(),
                     )
-                    Spacer(Modifier.height(if (dial) 10.dp else 6.dp))
+                    Spacer(Modifier.height(if (tall) 10.dp else 6.dp))
                     Slider(
                         value = state.referenceA4.toFloat(),
                         onValueChange = { onReferenceChange(it.toDouble()) },
@@ -149,7 +150,7 @@ fun ChromaticScreen(
         // Keep the reference controls visually separate from the persistent
         // navigation bar. The larger dial consumes most of the flexible space,
         // so it needs an explicit gap instead of relying on Spacer(weight).
-            Spacer(Modifier.height(if (dial) 8.dp else 6.dp))
+            Spacer(Modifier.height(if (tall) 8.dp else 6.dp))
         }
     }
 }

@@ -47,8 +47,8 @@ import androidx.compose.ui.unit.sp
 import com.precisiontuner.TuneVisualState
 import com.precisiontuner.TunerState
 import com.precisiontuner.settings.AppSettings
-import com.precisiontuner.settings.GaugeStyle
 import com.precisiontuner.settings.VisualMode
+import com.precisiontuner.settings.isTall
 import com.precisiontuner.tuning.CustomTuningStore
 import com.precisiontuner.tuning.CustomTuningPreset
 import com.precisiontuner.tuning.Instrument
@@ -165,7 +165,7 @@ fun InstrumentScreen(
                     visualState = state.visualState,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(if (settings.gaugeStyle == GaugeStyle.DIAL) 176.dp else 114.dp)
+                        .height(if (settings.gaugeStyle.isTall) 176.dp else 114.dp)
                         .padding(horizontal = 6.dp),
                 )
             }
@@ -176,7 +176,7 @@ fun InstrumentScreen(
                 waveform = state.waveform,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(if (settings.gaugeStyle == GaugeStyle.DIAL) 36.dp else 48.dp),
+                    .height(if (settings.gaugeStyle.isTall) 36.dp else 48.dp),
             )
         } else {
             SpectrumView(
@@ -184,7 +184,7 @@ fun InstrumentScreen(
                 detectedFrequency = state.detectedFrequency,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(if (settings.gaugeStyle == GaugeStyle.DIAL) 36.dp else 48.dp),
+                    .height(if (settings.gaugeStyle.isTall) 36.dp else 48.dp),
             )
         }
 

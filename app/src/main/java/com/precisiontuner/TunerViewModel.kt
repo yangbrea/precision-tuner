@@ -18,6 +18,7 @@ import com.precisiontuner.pitch.NoiseFloorEstimator
 import com.precisiontuner.pitch.OnlinePitchTracker
 import com.precisiontuner.pitch.Pitch
 import com.precisiontuner.pitch.PitchCandidate
+import com.precisiontuner.pitch.RollingPitchSmoother
 import com.precisiontuner.pitch.RmsOnsetDetector
 import com.precisiontuner.pitch.TinyCrepeResult
 import com.precisiontuner.pitch.TinyCrepeShadow
@@ -26,10 +27,10 @@ import com.precisiontuner.settings.AccentColor
 import com.precisiontuner.settings.AppSettings
 import com.precisiontuner.settings.DetectionEngine
 import com.precisiontuner.settings.GaugeStyle
-import com.precisiontuner.settings.Sensitivity
 import com.precisiontuner.settings.SettingsRepository
 import com.precisiontuner.settings.ThemeMode
 import com.precisiontuner.settings.VisualMode
+import com.precisiontuner.settings.signalToNoiseRatio
 import com.precisiontuner.tuning.Temperament
 import com.precisiontuner.tuning.Temperaments
 import com.precisiontuner.tuning.CustomTuningStore
@@ -62,6 +63,9 @@ class TunerViewModel(application: Application) : AndroidViewModel(application) {
 
     private val settingsRepository = SettingsRepository(application)
     val settings: StateFlow<AppSettings> = settingsRepository.settings
+
+    /** Rolling-average smoother over accepted pitch frequencies (settings-driven). */
+    private val pitchSmoother = RollingPitchSmoother(settings.value.smoothingWindow)
 
     private val customStore = CustomTuningStore(application)
     val customPresets: StateFlow<List<CustomTuningPreset>> = customStore.presets
@@ -143,9 +147,14 @@ class TunerViewModel(application: Application) : AndroidViewModel(application) {
 
     fun updateAccent(accent: AccentColor) = settingsRepository.setAccent(accent)
 
-    fun updateSensitivity(sensitivity: Sensitivity) {
-        settingsRepository.setSensitivity(sensitivity)
+    fun updateSensitivityThreshold(threshold: Float) {
+        settingsRepository.setSensitivityThreshold(threshold)
         pitchTracker.reset()
+    }
+
+    fun updateSmoothingWindow(window: Int) {
+        settingsRepository.setSmoothingWindow(window)
+        pitchSmoother.setWindowSize(window)
     }
 
     fun updateFilterStrength(strength: Float) = settingsRepository.setFilterStrength(strength)
@@ -335,11 +344,11 @@ class TunerViewModel(application: Application) : AndroidViewModel(application) {
         val previousAutomaticString = if (automaticMode) automaticStringTracker.activeString(tuning) else null
 
         val rms = noiseEstimator.rms(window)
-        if (!noiseEstimator.shouldAnalyze(rms, signalToNoiseRatio(s.sensitivity))) {
+        if (!noiseEstimator.shouldAnalyze(rms, signalToNoiseRatio(s.sensitivityThreshold))) {
             noiseEstimator.observeGateRejected(rms)
             if (automaticMode) {
                 automaticStringState = automaticStringTracker.submit(
-                    tuning, emptyList(), false, false, 0.0, s.sensitivity.confidence,
+                    tuning, emptyList(), false, false, 0.0, s.sensitivityThreshold.toDouble(),
                 )
                 _state.update { it.copy(activeString = automaticStringState.activeString?.number) }
             }
@@ -380,7 +389,7 @@ class TunerViewModel(application: Application) : AndroidViewModel(application) {
             pendingTinyCrepeResult = tinyCrepeShadow?.infer(window, SAMPLE_RATE)
         }
         val neuralCandidate = pendingTinyCrepeResult?.takeIf {
-            it.confidence >= s.sensitivity.confidence
+            it.confidence >= s.sensitivityThreshold.toDouble()
         }?.let {
             PitchCandidate(
                 frequency = it.frequency,
@@ -403,7 +412,7 @@ class TunerViewModel(application: Application) : AndroidViewModel(application) {
                     candidates = broadCandidates,
                     neuralFrequency = pendingTinyCrepeResult?.frequency,
                     neuralConfidence = pendingTinyCrepeResult?.confidence ?: 0.0,
-                    minimumConfidence = s.sensitivity.confidence,
+                    minimumConfidence = s.sensitivityThreshold.toDouble(),
                     triggerReason = hybridTrigger,
                 )
             else -> broadCandidates
@@ -420,7 +429,7 @@ class TunerViewModel(application: Application) : AndroidViewModel(application) {
         }
         val spectrum = detector.lastSpectrum?.toList() ?: emptyList()
         val lockedAccepted = lockedPitch != null &&
-            lockedPitch.confidence >= s.sensitivity.confidence &&
+            lockedPitch.confidence >= s.sensitivityThreshold.toDouble() &&
             abs(detectionTarget.centsFrom(lockedPitch.frequency)) <= MANUAL_LOCK_CENTS
 
         if (automaticMode) {
@@ -430,7 +439,7 @@ class TunerViewModel(application: Application) : AndroidViewModel(application) {
                 lockedAccepted = lockedAccepted,
                 onset = onset,
                 signalToNoiseRatio = rms / noiseEstimator.noiseFloor.coerceAtLeast(1e-9),
-                minimumVoicedProbability = s.sensitivity.confidence,
+                minimumVoicedProbability = s.sensitivityThreshold.toDouble(),
             )
             _state.update { it.copy(activeString = automaticStringState.activeString?.number) }
         }
@@ -441,7 +450,7 @@ class TunerViewModel(application: Application) : AndroidViewModel(application) {
 
         val candidates = buildList {
             addAll(engineCandidates.filter { candidate ->
-                candidate.voicedProbability >= s.sensitivity.confidence &&
+                candidate.voicedProbability >= s.sensitivityThreshold.toDouble() &&
                     (manualString != null || mode != TunerMode.INSTRUMENT ||
                         lockedString?.let { abs(it.centsFrom(candidate.frequency)) <= AUTO_TARGET_CENTS } == true)
             })
@@ -483,7 +492,7 @@ class TunerViewModel(application: Application) : AndroidViewModel(application) {
             return
         }
         val pitch = tracked.pitch
-        if (pitch == null || pitch.confidence < s.sensitivity.confidence) {
+        if (pitch == null || pitch.confidence < s.sensitivityThreshold.toDouble()) {
             noiseEstimator.observeUnvoiced(rms)
             rejectFrame(
                 lockedString, waveform, spectrum, rms, "viterbi_unvoiced",
@@ -491,31 +500,39 @@ class TunerViewModel(application: Application) : AndroidViewModel(application) {
             )
             return
         }
-        val medianFreq = pitch.frequency
+        val rawFreq = pitch.frequency
         noiseEstimator.observeVoiced(rms)
         if (detectionEngine == DetectionEngine.CREPE_HYBRID) {
-            crepeHybridArbitrator.observeAccepted(medianFreq)
+            crepeHybridArbitrator.observeAccepted(rawFreq)
         }
-        val phase = if (lockedString != null &&
-            abs(lockedString.centsFrom(medianFreq)) > MANUAL_LOCK_CENTS
-        ) DetectionPhase.OUT_OF_RANGE else DetectionPhase.TRACKING
         val a4 = _state.value.referenceA4
-        val observedNote = NoteMapper.noteFromFrequency(medianFreq, a4)
 
         // Instrument mode always reports deviation from a target in the active
         // tuning. Chromatic mode resolves against the selected temperament.
+        val targetString = if (mode == TunerMode.INSTRUMENT) lockedString else null
+
+        // Rolling-average smoothing keyed by the current note so a note change
+        // never blends old frequencies into the new one (no cross-note smearing).
+        val noteKey = targetString?.let { "instrument:${it.midi}:${it.number}" }
+            ?: "chromatic:${Temperaments.nearestNote(rawFreq, a4, s.temperament).midi}"
+        val smoothedFreq = pitchSmoother.push(noteKey, rawFreq) ?: rawFreq
+
+        val phase = if (lockedString != null &&
+            abs(lockedString.centsFrom(smoothedFreq)) > MANUAL_LOCK_CENTS
+        ) DetectionPhase.OUT_OF_RANGE else DetectionPhase.TRACKING
+        val observedNote = NoteMapper.noteFromFrequency(smoothedFreq, a4)
+
         val noteName: String
         val octave: Int
         val midi: Int
         val cents: Double
-        val targetString = if (mode == TunerMode.INSTRUMENT) lockedString else null
         if (targetString != null) {
             noteName = targetString.noteName
             midi = targetString.midi
             octave = targetString.midi / 12 - 1
-            cents = targetString.centsFrom(medianFreq)
+            cents = targetString.centsFrom(smoothedFreq)
         } else {
-            val note = Temperaments.nearestNote(medianFreq, a4, s.temperament)
+            val note = Temperaments.nearestNote(smoothedFreq, a4, s.temperament)
             noteName = note.name
             octave = note.octave
             midi = note.midi
@@ -553,7 +570,7 @@ class TunerViewModel(application: Application) : AndroidViewModel(application) {
                 else -> automaticStringTracker.activeString(tuning)?.number
             }
             st.copy(
-                detectedFrequency = medianFreq,
+                detectedFrequency = smoothedFreq,
                 noteName = noteName,
                 octave = octave,
                 midi = midi,
@@ -620,11 +637,6 @@ class TunerViewModel(application: Application) : AndroidViewModel(application) {
     private fun candidateCentsDistance(a: Double, b: Double): Double =
         abs(1200.0 * ln(a / b) / ln(2.0))
 
-    private fun signalToNoiseRatio(sensitivity: Sensitivity): Double = when (sensitivity) {
-        Sensitivity.HIGH -> 2.0
-        Sensitivity.MEDIUM -> 2.5
-        Sensitivity.LOW -> 3.0
-    }
 
     private fun logFrame(
         freq: Double?,
@@ -694,6 +706,7 @@ class TunerViewModel(application: Application) : AndroidViewModel(application) {
 
     private fun resetDetection() {
         pitchTracker.reset()
+        pitchSmoother.reset()
         onsetDetector.reset()
         noiseEstimator.reset()
         automaticStringTracker.reset()

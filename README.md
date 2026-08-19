@@ -40,8 +40,9 @@ historical temperaments, and a metronome — with AI-assisted pitch detection.
   questions are played with the bundled piano samples and answered as 4-option
   multiple choice, with game-style feedback (pulse play button, wrong-answer
   shake, accuracy ring, lives hearts, correct/wrong sound cues).
-- **Visualizations** — spectrum and time-domain waveform views; two gauge
-  styles (precision rail / dial) in a flat dark-light theme.
+- **Visualizations** — spectrum and time-domain waveform views; three gauge
+  styles (precision rail / dial / scrolling pitch waterfall) in a flat dark-light
+  theme.
 
 ## Screenshots
 

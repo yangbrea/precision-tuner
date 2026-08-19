@@ -11,7 +11,9 @@ import org.junit.Test
 
 class RhythmScorerTest {
 
-    private val quarters = RhythmLibrary.QUARTERS // [12,12,12,12], 4 taps
+    // Hand-built steady pulse (removed from the library as "tap evenly" filler,
+    // but the scorer must still handle it).
+    private val quarters = RhythmPattern("测试四分", notes = List(4) { RhythmNote(12) })
 
     @Test fun `perfect reproduction scores one hundred`() {
         val scored = RhythmScorer.score(quarters, listOf(0L, 500L, 1000L, 1500L))
@@ -73,7 +75,7 @@ class RhythmScorerTest {
     }
 
     @Test fun `a sixteenth run must be tapped densely to pass`() {
-        val sixteenths = RhythmLibrary.ALL_SIXTEENTHS // 16 taps
+        val sixteenths = RhythmPattern("测试十六分", notes = List(16) { RhythmNote(3) })
         val perfect = RhythmScorer.score(
             sixteenths,
             List(16) { it * 125L }, // 125 ms apart, total 1875 ms

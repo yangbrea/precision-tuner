@@ -1,5 +1,6 @@
 package com.precisiontuner
 
+import com.precisiontuner.ear.RhythmNote
 import com.precisiontuner.ear.RhythmLibrary
 import com.precisiontuner.ear.RhythmPattern
 import com.precisiontuner.ui.ear.beatGrids
@@ -18,14 +19,15 @@ class RhythmStaffBeamTest {
             .map { it.start to it.end }
 
     @Test fun `eight eighths beam as four groups of two`() {
-        assertEquals(listOf(0 to 1, 2 to 3, 4 to 5, 6 to 7), groups(RhythmLibrary.EIGHTHS))
+        val eighths = RhythmPattern("测试八分", notes = List(8) { RhythmNote(6) })
+        assertEquals(listOf(0 to 1, 2 to 3, 4 to 5, 6 to 7), groups(eighths))
     }
 
     @Test fun `sixteenth run beams one beat per group`() {
         // 16 sixteenths at 3 grids each: 4 groups of 4 (one beat each).
         assertEquals(
             listOf(0 to 3, 4 to 7, 8 to 11, 12 to 15),
-            groups(RhythmLibrary.ALL_SIXTEENTHS),
+            groups(RhythmPattern("测试十六分", notes = List(16) { RhythmNote(3) })),
         )
     }
 
@@ -44,7 +46,7 @@ class RhythmStaffBeamTest {
         // 3/4 six eighths: onsets 0,6,12,18,24,30, beat 12 -> groups of 2.
         assertEquals(
             listOf(0 to 1, 2 to 3, 4 to 5),
-            groups(RhythmLibrary.THREE_FOUR_EIGHTHS),
+            groups(RhythmPattern("测试三拍八分", beatsPerBar = 3, notes = List(6) { RhythmNote(6) })),
         )
     }
 

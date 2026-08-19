@@ -2,8 +2,12 @@ package com.precisiontuner
 
 import com.precisiontuner.ui.GaugeEdge
 import com.precisiontuner.ui.GaugeTone
+import com.precisiontuner.ui.MAX_PITCH_SAMPLES
+import com.precisiontuner.ui.centGridX
 import com.precisiontuner.ui.gaugeAngle
 import com.precisiontuner.ui.gaugeReading
+import com.precisiontuner.ui.pushPitchSample
+import com.precisiontuner.ui.railCursorX
 import com.precisiontuner.ui.shouldTriggerGaugePulse
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -75,5 +79,47 @@ class TunerGaugeTest {
     @Test fun `dial angle clamps out of range fractions`() {
         assertEquals(170f, gaugeAngle(-0.5f), 0.0001f)
         assertEquals(370f, gaugeAngle(1.5f), 0.0001f)
+    }
+
+    @Test fun `rail cursor maps fractions linearly across the track`() {
+        val left = 100f
+        val width = 800f
+        assertEquals(100f, railCursorX(0f, left, width), 0.0001f)
+        assertEquals(500f, railCursorX(0.5f, left, width), 0.0001f)
+        assertEquals(900f, railCursorX(1f, left, width), 0.0001f)
+        assertEquals(700f, railCursorX(0.75f, left, width), 0.0001f)
+    }
+
+    @Test fun `rail cursor clamps out of range fractions`() {
+        assertEquals(100f, railCursorX(-0.5f, 100f, 800f), 0.0001f)
+        assertEquals(900f, railCursorX(1.5f, 100f, 800f), 0.0001f)
+    }
+
+    @Test fun `cent grid maps cents to positions on the waterfall`() {
+        assertEquals(500f, centGridX(0f, 500f, 800f), 0.0001f) // center
+        assertEquals(100f, centGridX(-50f, 500f, 800f), 0.0001f) // left end
+        assertEquals(900f, centGridX(50f, 500f, 800f), 0.0001f) // right end
+        assertEquals(300f, centGridX(-25f, 500f, 800f), 0.0001f) // half left
+        assertEquals(700f, centGridX(25f, 500f, 800f), 0.0001f) // half right
+    }
+
+    @Test fun `pitch waterfall prepends newest sample and caps length`() {
+        var history: List<Float> = emptyList()
+        for (i in 0 until 100) {
+            history = pushPitchSample(history, i * 0.01f)
+        }
+        assertEquals(MAX_PITCH_SAMPLES, history.size)
+        assertEquals(99 * 0.01f, history.first(), 0.0001f) // newest at index 0
+        assertEquals((100 - MAX_PITCH_SAMPLES) * 0.01f, history.last(), 0.0001f)
+    }
+
+    @Test fun `pitch waterfall keeps silence gaps as NaN`() {
+        var history = pushPitchSample(emptyList(), Float.NaN)
+        history = pushPitchSample(history, 0.5f)
+        history = pushPitchSample(history, 0.6f)
+        assertEquals(3, history.size)
+        assertTrue(!history[0].isNaN()) // newest = 0.6
+        assertTrue(!history[1].isNaN()) // 0.5
+        assertTrue(history[2].isNaN()) // oldest silence gap
     }
 }

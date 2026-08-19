@@ -205,7 +205,8 @@ fun TunerApp(
                 showSettings -> SettingsScreen(
                     settings = settings,
                     onAccentChange = viewModel::updateAccent,
-                    onSensitivityChange = viewModel::updateSensitivity,
+                    onSensitivityThresholdChange = viewModel::updateSensitivityThreshold,
+                    onSmoothingWindowChange = viewModel::updateSmoothingWindow,
                     onFilterChange = viewModel::updateFilterStrength,
                     onThemeModeChange = viewModel::updateThemeMode,
                     onVisualModeChange = viewModel::updateVisualMode,

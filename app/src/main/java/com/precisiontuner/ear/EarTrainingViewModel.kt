@@ -140,6 +140,9 @@ class EarTrainingViewModel(application: Application) : AndroidViewModel(applicat
         val type = _activeExercise.value
         if (type != ExerciseType.RHYTHM) return
         val session = sessions.getValue(type)
+        // Already answered (e.g. the recorder fired once more before hiding):
+        // ignore — no re-scoring, no repeated feedback sound.
+        if (session.selectedIndex != null) return
         val pattern = session.question?.rhythmPattern ?: return
         val scored = RhythmScorer.score(pattern, taps)
         val detail = "节奏准确度 ${scored.score}%（${scored.tapped}/${scored.expected} 音）"

@@ -21,6 +21,9 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.material3.OutlinedButton
@@ -37,7 +40,6 @@ import com.precisiontuner.settings.AppSettings
 import com.precisiontuner.BuildConfig
 import com.precisiontuner.settings.DetectionEngine
 import com.precisiontuner.settings.GaugeStyle
-import com.precisiontuner.settings.Sensitivity
 import com.precisiontuner.settings.ThemeMode
 import com.precisiontuner.settings.VisualMode
 import kotlin.math.roundToInt
@@ -46,7 +48,8 @@ import kotlin.math.roundToInt
 fun SettingsScreen(
     settings: AppSettings,
     onAccentChange: (AccentColor) -> Unit,
-    onSensitivityChange: (Sensitivity) -> Unit,
+    onSensitivityThresholdChange: (Float) -> Unit,
+    onSmoothingWindowChange: (Int) -> Unit,
     onFilterChange: (Float) -> Unit,
     onThemeModeChange: (ThemeMode) -> Unit,
     onVisualModeChange: (VisualMode) -> Unit,
@@ -68,7 +71,11 @@ fun SettingsScreen(
 
         Spacer(Modifier.height(28.dp))
         SectionTitle("主题模式")
-        ThemeModeRow(selected = settings.themeMode, onSelect = onThemeModeChange)
+        SegmentedCapsule(
+            labels = listOf("深色", "浅色"),
+            selected = if (settings.themeMode == ThemeMode.DARK) 0 else 1,
+            onSelect = { onThemeModeChange(if (it == 0) ThemeMode.DARK else ThemeMode.LIGHT) },
+        )
 
         Spacer(Modifier.height(28.dp))
         SectionTitle("主题色")
@@ -76,7 +83,11 @@ fun SettingsScreen(
 
         Spacer(Modifier.height(28.dp))
         SectionTitle("可视化")
-        VisualModeRow(selected = settings.visualMode, onSelect = onVisualModeChange)
+        SegmentedCapsule(
+            labels = listOf("频谱", "波形"),
+            selected = if (settings.visualMode == VisualMode.SPECTRUM) 0 else 1,
+            onSelect = { onVisualModeChange(if (it == 0) VisualMode.SPECTRUM else VisualMode.WAVEFORM) },
+        )
 
         Spacer(Modifier.height(28.dp))
         SectionTitle("仪表盘样式")
@@ -84,9 +95,20 @@ fun SettingsScreen(
         Hint("刻度条：横向精密刻度；表盘：半圆弧形刻度")
 
         Spacer(Modifier.height(28.dp))
-        SectionTitle("响应灵敏度")
-        SensitivityRow(selected = settings.sensitivity, onSelect = onSensitivityChange)
-        Hint("高 = 响应快、指针较灵敏;低 = 更稳定、略慢")
+        SectionTitle("灵敏度门限")
+        SensitivitySlider(
+            value = settings.sensitivityThreshold,
+            onChange = onSensitivityThresholdChange,
+        )
+        Hint("置信度门槛:越高越严格,弱信号帧被忽略;推荐 40%–60%")
+
+        Spacer(Modifier.height(28.dp))
+        SectionTitle("平滑窗口")
+        SmoothingWindowSlider(
+            value = settings.smoothingWindow,
+            onChange = onSmoothingWindowChange,
+        )
+        Hint("滑动平均窗口:越大越稳、响应越慢;换音自动重置不串音")
 
         if (BuildConfig.DEBUG && BuildConfig.TINY_CREPE_ENABLED) {
             Spacer(Modifier.height(28.dp))
@@ -160,69 +182,19 @@ private fun Hint(text: String) {
 }
 
 @Composable
-private fun ThemeModeRow(selected: ThemeMode, onSelect: (ThemeMode) -> Unit) {
-    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-        ThemeMode.entries.forEach { mode ->
-            val isSelected = mode == selected
-            val accent = MaterialTheme.colorScheme.primary
-            Box(
-                modifier = Modifier
-                    .weight(1f)
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(
-                        if (isSelected) accent.copy(alpha = 0.2f) else MaterialTheme.colorScheme.surfaceVariant,
-                        RoundedCornerShape(12.dp),
-                    )
-                    .border(
-                        width = 1.5.dp,
-                        color = if (isSelected) accent else MaterialTheme.colorScheme.outlineVariant,
-                        shape = RoundedCornerShape(12.dp),
-                    )
-                    .clickable { onSelect(mode) }
-                    .padding(vertical = 12.dp),
-                contentAlignment = Alignment.Center,
-            ) {
-                Text(
-                    text = if (mode == ThemeMode.DARK) "深色" else "浅色",
-                    fontSize = 15.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = if (isSelected) accent else MaterialTheme.colorScheme.onBackground,
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun VisualModeRow(selected: VisualMode, onSelect: (VisualMode) -> Unit) {
-    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-        VisualMode.entries.forEach { mode ->
-            val isSelected = mode == selected
-            val accent = MaterialTheme.colorScheme.primary
-            Box(
-                modifier = Modifier
-                    .weight(1f)
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(
-                        if (isSelected) accent.copy(alpha = 0.2f) else MaterialTheme.colorScheme.surfaceVariant,
-                        RoundedCornerShape(12.dp),
-                    )
-                    .border(
-                        width = 1.5.dp,
-                        color = if (isSelected) accent else MaterialTheme.colorScheme.outlineVariant,
-                        shape = RoundedCornerShape(12.dp),
-                    )
-                    .clickable { onSelect(mode) }
-                    .padding(vertical = 12.dp),
-                contentAlignment = Alignment.Center,
-            ) {
-                Text(
-                    text = if (mode == VisualMode.SPECTRUM) "频谱" else "波形",
-                    fontSize = 15.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = if (isSelected) accent else MaterialTheme.colorScheme.onBackground,
-                )
-            }
+private fun SegmentedCapsule(
+    labels: List<String>,
+    selected: Int,
+    onSelect: (Int) -> Unit,
+) {
+    SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+        labels.forEachIndexed { index, label ->
+            SegmentedButton(
+                selected = index == selected,
+                onClick = { onSelect(index) },
+                shape = SegmentedButtonDefaults.itemShape(index = index, count = labels.size),
+                label = { Text(label) },
+            )
         }
     }
 }
@@ -295,39 +267,40 @@ private fun AccentRow(selected: AccentColor, onSelect: (AccentColor) -> Unit) {
 }
 
 @Composable
-private fun SensitivityRow(selected: Sensitivity, onSelect: (Sensitivity) -> Unit) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(10.dp),
-    ) {
-        Sensitivity.entries.forEach { s ->
-            val isSelected = s == selected
-            val accent = MaterialTheme.colorScheme.primary
-            Box(
-                modifier = Modifier
-                    .weight(1f)
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(
-                        if (isSelected) accent.copy(alpha = 0.2f) else MaterialTheme.colorScheme.surfaceVariant,
-                        RoundedCornerShape(12.dp),
-                    )
-                    .border(
-                        width = 1.5.dp,
-                        color = if (isSelected) accent else MaterialTheme.colorScheme.outlineVariant,
-                        shape = RoundedCornerShape(12.dp),
-                    )
-                    .clickable { onSelect(s) }
-                    .padding(vertical = 12.dp),
-                contentAlignment = Alignment.Center,
-            ) {
-                Text(
-                    text = s.label,
-                    fontSize = 16.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = if (isSelected) accent else MaterialTheme.colorScheme.onBackground,
-                )
-            }
-        }
+private fun SensitivitySlider(value: Float, onChange: (Float) -> Unit) {
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Slider(
+            value = value,
+            onValueChange = onChange,
+            valueRange = 0.30f..0.80f,
+            steps = 49,
+            modifier = Modifier.fillMaxWidth(),
+        )
+        Text(
+            text = "当前 ${(value * 100).roundToInt()}%",
+            fontSize = 13.sp,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.align(Alignment.CenterHorizontally),
+        )
+    }
+}
+
+@Composable
+private fun SmoothingWindowSlider(value: Int, onChange: (Int) -> Unit) {
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Slider(
+            value = value.toFloat(),
+            onValueChange = { onChange(it.roundToInt()) },
+            valueRange = 1f..21f,
+            steps = 19,
+            modifier = Modifier.fillMaxWidth(),
+        )
+        Text(
+            text = "当前 $value 帧",
+            fontSize = 13.sp,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.align(Alignment.CenterHorizontally),
+        )
     }
 }
 

@@ -23,7 +23,11 @@ class SettingsRepository(context: Context) {
 
     fun setAccent(accent: AccentColor) = update { it.copy(accent = accent) }
 
-    fun setSensitivity(sensitivity: Sensitivity) = update { it.copy(sensitivity = sensitivity) }
+    fun setSensitivityThreshold(threshold: Float) =
+        update { it.copy(sensitivityThreshold = threshold.coerceIn(0.30f, 0.80f)) }
+
+    fun setSmoothingWindow(window: Int) =
+        update { it.copy(smoothingWindow = window.coerceIn(1, 21)) }
 
     fun setFilterStrength(strength: Float) =
         update { it.copy(filterStrength = strength.coerceIn(0f, 1f)) }
@@ -50,7 +54,9 @@ class SettingsRepository(context: Context) {
         _settings.value = next
         prefs.edit()
             .putString(KEY_ACCENT, next.accent.name)
-            .putString(KEY_SENSITIVITY, next.sensitivity.name)
+            .putFloat(KEY_SENSITIVITY_THRESHOLD, next.sensitivityThreshold)
+            .putInt(KEY_SMOOTHING_WINDOW, next.smoothingWindow)
+            .remove(KEY_SENSITIVITY) // legacy enum key, superseded
             .putFloat(KEY_FILTER, next.filterStrength)
             .putString(KEY_THEME, next.themeMode.name)
             .putString(KEY_VISUAL, next.visualMode.name)
@@ -66,9 +72,15 @@ class SettingsRepository(context: Context) {
         val accent = runCatching {
             AccentColor.valueOf(prefs.getString(KEY_ACCENT, null) ?: "")
         }.getOrDefault(AccentColor.GREEN)
-        val sensitivity = runCatching {
-            Sensitivity.valueOf(prefs.getString(KEY_SENSITIVITY, null) ?: "")
-        }.getOrDefault(Sensitivity.MEDIUM)
+        // Migrate the legacy three-tier enum (HIGH/MEDIUM/LOW) to the sliders.
+        val legacySensitivity = prefs.getString(KEY_SENSITIVITY, null)
+        val (threshold, window) = when (legacySensitivity) {
+            "HIGH" -> 0.45f to 3
+            "MEDIUM" -> 0.50f to 5
+            "LOW" -> 0.60f to 9
+            else -> prefs.getFloat(KEY_SENSITIVITY_THRESHOLD, 0.50f) to
+                prefs.getInt(KEY_SMOOTHING_WINDOW, 5)
+        }
         val filter = prefs.getFloat(KEY_FILTER, 0.5f).coerceIn(0f, 1f)
         val theme = runCatching {
             ThemeMode.valueOf(prefs.getString(KEY_THEME, null) ?: "")
@@ -99,7 +111,8 @@ class SettingsRepository(context: Context) {
         }
         return AppSettings(
             accent = accent,
-            sensitivity = sensitivity,
+            sensitivityThreshold = threshold,
+            smoothingWindow = window,
             filterStrength = filter,
             themeMode = theme,
             visualMode = visual,
@@ -114,7 +127,9 @@ class SettingsRepository(context: Context) {
     private companion object {
         const val PREFS_NAME = "tuner_settings"
         const val KEY_ACCENT = "accent"
-        const val KEY_SENSITIVITY = "sensitivity"
+        const val KEY_SENSITIVITY = "sensitivity" // legacy enum key, migrated away
+        const val KEY_SENSITIVITY_THRESHOLD = "sensitivityThreshold"
+        const val KEY_SMOOTHING_WINDOW = "smoothingWindow"
         const val KEY_FILTER = "filterStrength"
         const val KEY_THEME = "theme"
         const val KEY_VISUAL = "visual"
