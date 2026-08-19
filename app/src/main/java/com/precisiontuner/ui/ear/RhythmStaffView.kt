@@ -106,8 +106,10 @@ fun RhythmStaffView(pattern: RhythmPattern, modifier: Modifier = Modifier) {
         )
 
         // Runs of consecutive equal short notes (eighth or sixteenth runs)
-        // share a beam instead of individual flags.
-        val beamGroups = findBeamGroups(notes, onsets)
+        // share a beam instead of individual flags. Groups follow VexFlow's
+        // auto-beaming rule: split at beat boundaries (one beat = 12 grid
+        // units, 18 for a compound 6/8 beat), so a run never spans beats.
+        val beamGroups = findBeamGroups(notes, onsets, beatGrids(pattern))
 
         notes.forEachIndexed { i, note ->
             val center = Offset(centerX(onsets[i], note.grids), centerY)
@@ -154,28 +156,41 @@ fun RhythmStaffView(pattern: RhythmPattern, modifier: Modifier = Modifier) {
         }
 
         // Beams sit on the stem tops (glyph bbox yMax ≈ 0.875 em above the
-        // notehead centre) and span the two outermost stems only, with a small
-        // overhang at each end; a sixteenth run adds a second beam just below.
+        // notehead centre). Per VexFlow: beam thickness ≈ 0.5 staff space
+        // (0.11 em), layer spacing = 1.5 × thickness, and the beam overhangs
+        // each outermost stem by about one third of a notehead.
         val beamTopY = centerY - STEM_TOP_EM * emPx
-        val beamThickness = 0.08f * emPx
+        val beamThickness = 0.11f * emPx
+        val beamLayerSpacing = 0.16f * emPx
+        val overhang = 0.10f * emPx
         beamGroups.forEach { (start, end, beams) ->
-            val fromX = centerX(onsets[start], notes[start].grids) + STEM_X_EM * emPx - 0.06f * emPx
-            val toX = centerX(onsets[end], notes[end].grids) + STEM_X_EM * emPx + 0.06f * emPx
+            val fromX = centerX(onsets[start], notes[start].grids) + STEM_X_EM * emPx - overhang
+            val toX = centerX(onsets[end], notes[end].grids) + STEM_X_EM * emPx + overhang
             for (beam in 0 until beams) {
-                val y = beamTopY + beam * 0.10f * emPx
+                val y = beamTopY + beam * beamLayerSpacing
                 drawLine(inkColor, Offset(fromX, y), Offset(toX, y), beamThickness, StrokeCap.Round)
             }
         }
     }
 }
 
-private data class BeamGroup(val start: Int, val end: Int, val beams: Int)
+internal data class BeamGroup(val start: Int, val end: Int, val beams: Int)
+
+/** Grid units per beat: 12 for simple meters, 18 (dotted quarter) for 6/8. */
+internal fun beatGrids(pattern: com.precisiontuner.ear.RhythmPattern): Int =
+    if (pattern.beatUnit == 8) 18 else 12
 
 /**
  * Groups consecutive audible notes of equal duration whose onsets are exactly
  * adjacent (gap == duration): 6-grid runs -> one beam, 3-grid runs -> two.
+ * Following VexFlow's auto-beaming, a group never crosses a beat boundary, so
+ * each beat's eighths/sixteenths beam together instead of one long run.
  */
-private fun findBeamGroups(notes: List<com.precisiontuner.ear.RhythmNote>, onsets: List<Int>): List<BeamGroup> {
+internal fun findBeamGroups(
+    notes: List<com.precisiontuner.ear.RhythmNote>,
+    onsets: List<Int>,
+    beatGrids: Int,
+): List<BeamGroup> {
     val groups = mutableListOf<BeamGroup>()
     var i = 0
     while (i < notes.size) {
@@ -186,7 +201,9 @@ private fun findBeamGroups(notes: List<com.precisiontuner.ear.RhythmNote>, onset
         val grids = notes[i].grids
         var j = i + 1
         while (j < notes.size && !notes[j].isRest && notes[j].grids == grids &&
-            onsets[j] - onsets[j - 1] == grids
+            onsets[j] - onsets[j - 1] == grids &&
+            // A beat boundary starts a fresh group (VexFlow auto-beaming).
+            onsets[j] % beatGrids != 0
         ) {
             j++
         }
