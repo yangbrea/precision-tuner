@@ -34,6 +34,8 @@ class SettingsRepository(context: Context) {
 
     fun setThemeMode(mode: ThemeMode) = update { it.copy(themeMode = mode) }
 
+    fun setThemePreset(preset: ThemePreset) = update { it.copy(themePreset = preset) }
+
     fun setVisualMode(mode: VisualMode) = update { it.copy(visualMode = mode) }
 
     fun setGaugeStyle(style: GaugeStyle) = update { it.copy(gaugeStyle = style) }
@@ -59,6 +61,7 @@ class SettingsRepository(context: Context) {
             .remove(KEY_SENSITIVITY) // legacy enum key, superseded
             .putFloat(KEY_FILTER, next.filterStrength)
             .putString(KEY_THEME, next.themeMode.name)
+            .putString(KEY_THEME_PRESET, next.themePreset.name)
             .putString(KEY_VISUAL, next.visualMode.name)
             .putString(KEY_GAUGE_STYLE, next.gaugeStyle.name)
             .putString(KEY_TEMPERAMENT, next.temperament.name)
@@ -85,6 +88,7 @@ class SettingsRepository(context: Context) {
         val theme = runCatching {
             ThemeMode.valueOf(prefs.getString(KEY_THEME, null) ?: "")
         }.getOrDefault(ThemeMode.DARK)
+        val themePreset = parseThemePreset(prefs.getString(KEY_THEME_PRESET, null))
         val visual = runCatching {
             VisualMode.valueOf(prefs.getString(KEY_VISUAL, null) ?: "")
         }.getOrDefault(VisualMode.SPECTRUM)
@@ -115,6 +119,7 @@ class SettingsRepository(context: Context) {
             smoothingWindow = window,
             filterStrength = filter,
             themeMode = theme,
+            themePreset = themePreset,
             visualMode = visual,
             gaugeStyle = gaugeStyle,
             temperament = temperament,
@@ -132,6 +137,7 @@ class SettingsRepository(context: Context) {
         const val KEY_SMOOTHING_WINDOW = "smoothingWindow"
         const val KEY_FILTER = "filterStrength"
         const val KEY_THEME = "theme"
+        const val KEY_THEME_PRESET = "themePreset"
         const val KEY_VISUAL = "visual"
         const val KEY_GAUGE_STYLE = "gaugeStyle"
         const val KEY_TEMPERAMENT = "temperament"

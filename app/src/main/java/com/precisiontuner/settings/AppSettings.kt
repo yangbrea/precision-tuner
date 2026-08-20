@@ -6,6 +6,21 @@ import com.precisiontuner.tuning.Temperament
 /** Dark vs light app theme. */
 enum class ThemeMode { DARK, LIGHT }
 
+/** Complete system color presets. [CLASSIC] keeps the user's custom controls. */
+enum class ThemePreset(val label: String, val lockedMode: ThemeMode?) {
+    CLASSIC("经典自定义", null),
+    MIDNIGHT("午夜蓝", ThemeMode.DARK),
+    FOREST("森林", ThemeMode.DARK),
+    GRAPHITE_ROSE("石墨玫瑰", ThemeMode.DARK),
+    WARM_PAPER("暖纸", ThemeMode.LIGHT),
+    OCEAN("海洋", ThemeMode.LIGHT),
+    LAVENDER("薰衣草", ThemeMode.LIGHT),
+}
+
+fun parseThemePreset(storedValue: String?): ThemePreset = runCatching {
+    ThemePreset.valueOf(storedValue.orEmpty())
+}.getOrDefault(ThemePreset.CLASSIC)
+
 /** Which visualization is shown in the tuner screens. */
 enum class VisualMode { SPECTRUM, WAVEFORM }
 
@@ -36,6 +51,7 @@ data class AppSettings(
     val smoothingWindow: Int = 5,
     val filterStrength: Float = 0.5f, // 0..1, 0 = off
     val themeMode: ThemeMode = ThemeMode.DARK,
+    val themePreset: ThemePreset = ThemePreset.CLASSIC,
     val visualMode: VisualMode = VisualMode.SPECTRUM,
     val gaugeStyle: GaugeStyle = GaugeStyle.RAIL,
     val temperament: Temperament = Temperament.EQUAL,
@@ -45,6 +61,10 @@ data class AppSettings(
     val instrumentId: String = "guitar",
     val tuningId: String = "standard",
 )
+
+/** Mode rendered by the UI without mutating the saved classic preference. */
+val AppSettings.effectiveThemeMode: ThemeMode
+    get() = themePreset.lockedMode ?: themeMode
 
 /**
  * Maps the pitch-confidence gate to the noise-floor analysis SNR requirement.

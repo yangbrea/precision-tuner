@@ -29,6 +29,7 @@ import com.precisiontuner.settings.DetectionEngine
 import com.precisiontuner.settings.GaugeStyle
 import com.precisiontuner.settings.SettingsRepository
 import com.precisiontuner.settings.ThemeMode
+import com.precisiontuner.settings.ThemePreset
 import com.precisiontuner.settings.VisualMode
 import com.precisiontuner.settings.signalToNoiseRatio
 import com.precisiontuner.tuning.Temperament
@@ -160,6 +161,8 @@ class TunerViewModel(application: Application) : AndroidViewModel(application) {
     fun updateFilterStrength(strength: Float) = settingsRepository.setFilterStrength(strength)
 
     fun updateThemeMode(mode: ThemeMode) = settingsRepository.setThemeMode(mode)
+
+    fun updateThemePreset(preset: ThemePreset) = settingsRepository.setThemePreset(preset)
 
     fun updateVisualMode(mode: VisualMode) = settingsRepository.setVisualMode(mode)
 
