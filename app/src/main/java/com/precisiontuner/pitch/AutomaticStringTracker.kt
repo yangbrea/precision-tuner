@@ -1,6 +1,7 @@
 package com.precisiontuner.pitch
 
 import com.precisiontuner.tuning.InstrumentString
+import com.precisiontuner.tuning.NoteMapper
 import com.precisiontuner.tuning.Tuning
 import kotlin.math.abs
 import kotlin.math.ln
@@ -39,6 +40,7 @@ class AutomaticStringTracker(
         onset: Boolean,
         signalToNoiseRatio: Double,
         minimumVoicedProbability: Double,
+        a4: Double = NoteMapper.DEFAULT_A4,
     ): AutomaticStringState {
         if (tuning == null || tuning.strings.isEmpty()) {
             reset()
@@ -46,8 +48,8 @@ class AutomaticStringTracker(
         }
 
         val mapped = broadCandidates.mapNotNull { candidate ->
-            val string = tuning.nearestString(candidate.frequency) ?: return@mapNotNull null
-            val cents = string.centsFrom(candidate.frequency)
+            val string = tuning.nearestString(candidate.frequency, a4) ?: return@mapNotNull null
+            val cents = string.centsFrom(candidate.frequency, a4)
             if (abs(cents) > CAPTURE_CENTS) null else Mapped(candidate, string, cents)
         }
         val credible = mapped

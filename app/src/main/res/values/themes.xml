@@ -4,4 +4,15 @@
         <item name="android:statusBarColor">#0E0E10</item>
         <item name="android:windowBackground">#0E0E10</item>
     </style>
+
+    <!-- Android 7–11 starting window; MainActivity immediately switches back
+         to Theme.Tunner while this remains visible until the first real frame. -->
+    <style name="Theme.Tunner.Starting" parent="Theme.Tunner">
+        <item name="android:windowBackground">@drawable/splash_screen</item>
+        <item name="android:statusBarColor">@color/splash_background</item>
+        <item name="android:navigationBarColor">@color/splash_background</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:windowLightNavigationBar">false</item>
+        <item name="android:windowDisablePreview">false</item>
+    </style>
 </resources>

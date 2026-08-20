@@ -75,14 +75,15 @@ fun TunerApp(
     val context = LocalContext.current
     var permissionRequested by rememberSaveable { mutableStateOf(false) }
     var showSettings by rememberSaveable { mutableStateOf(false) }
+    var settingsSection by rememberSaveable { mutableStateOf<SettingsSection?>(null) }
     var showPresetManager by rememberSaveable { mutableStateOf(false) }
 
-    val navigateBackFromSettings: () -> Unit = remember(showPresetManager) {
+    val navigateBackFromSettings: () -> Unit = remember(showPresetManager, settingsSection) {
         {
-            if (showPresetManager) {
-                showPresetManager = false
-            } else {
-                showSettings = false
+            when {
+                showPresetManager -> showPresetManager = false
+                settingsSection != null -> settingsSection = null
+                else -> showSettings = false
             }
         }
     }
@@ -153,7 +154,14 @@ fun TunerApp(
         ),
         topBar = {
             TopAppBar(
-                title = { Text(when { showPresetManager -> "调弦预设"; showSettings -> "设置"; else -> "调音器 Tuner" }) },
+                title = { Text(when {
+                    showPresetManager -> "调弦预设"
+                    settingsSection == SettingsSection.THEME -> "主题"
+                    settingsSection == SettingsSection.TUNING -> "调音选项"
+                    settingsSection == SettingsSection.ABOUT -> "版本信息"
+                    showSettings -> "设置"
+                    else -> "调音器 Tuner"
+                }) },
                 navigationIcon = {
                     if (showSettings || showPresetManager) {
                         IconButton(onClick = navigateBackFromSettings) {
@@ -202,19 +210,32 @@ fun TunerApp(
                     onUpdate = viewModel::updateCustomPreset,
                     onDelete = viewModel::deleteCustomPreset,
                 )
-                showSettings -> SettingsScreen(
-                    settings = settings,
-                    onAccentChange = viewModel::updateAccent,
-                    onSensitivityThresholdChange = viewModel::updateSensitivityThreshold,
-                    onSmoothingWindowChange = viewModel::updateSmoothingWindow,
-                    onFilterChange = viewModel::updateFilterStrength,
-                    onThemeModeChange = viewModel::updateThemeMode,
-                    onThemePresetChange = viewModel::updateThemePreset,
-                    onVisualModeChange = viewModel::updateVisualMode,
-                    onGaugeStyleChange = viewModel::updateGaugeStyle,
-                    onDetectionEngineChange = viewModel::updateDetectionEngine,
-                    onManageTunings = { showPresetManager = true },
-                )
+                showSettings -> when (settingsSection) {
+                    SettingsSection.THEME -> ThemeSettingsScreen(
+                        settings = settings,
+                        onAccentChange = viewModel::updateAccent,
+                        onThemeModeChange = viewModel::updateThemeMode,
+                        onThemePresetChange = viewModel::updateThemePreset,
+                        onVisualModeChange = viewModel::updateVisualMode,
+                        onGaugeStyleChange = viewModel::updateGaugeStyle,
+                    )
+                    SettingsSection.TUNING -> TuningSettingsScreen(
+                        settings = settings,
+                        onReferenceA4Change = viewModel::updateReferenceA4,
+                        onSensitivityThresholdChange = viewModel::updateSensitivityThreshold,
+                        onSmoothingWindowChange = viewModel::updateSmoothingWindow,
+                        onFilterChange = viewModel::updateFilterStrength,
+                        onDetectionEngineChange = viewModel::updateDetectionEngine,
+                    )
+                    SettingsSection.ABOUT -> AboutScreen()
+                    null -> SettingsScreen(
+                        onOpenTheme = { settingsSection = SettingsSection.THEME },
+                        onOpenTuning = { settingsSection = SettingsSection.TUNING },
+                        onManageTunings = { showPresetManager = true },
+                        onOpenAbout = { settingsSection = SettingsSection.ABOUT },
+                        onResetSettings = viewModel::resetSettings,
+                    )
+                }
                 state.mode == TunerMode.METRONOME -> MetronomeScreen(
                     state = metronomeState,
                     onToggle = metronomeViewModel::toggle,
@@ -268,7 +289,6 @@ fun TunerApp(
                     state = state,
                     settings = settings,
                     onTemperamentChange = viewModel::updateTemperament,
-                    onReferenceChange = viewModel::setReferenceA4,
                 )
             }
         }

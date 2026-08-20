@@ -36,9 +36,6 @@ data class TunerState(
     val selectedString: Int? = null,
     val activeString: Int? = null,
 
-    // Concert pitch reference.
-    val referenceA4: Double = 440.0,
-
     // Normalized magnitude spectrum (display bands), for visualization.
     val spectrum: List<Float> = emptyList(),
 

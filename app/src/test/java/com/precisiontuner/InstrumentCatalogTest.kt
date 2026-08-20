@@ -86,6 +86,18 @@ class InstrumentCatalogTest {
     }
 
     @Test
+    fun frequencyFollowsA4Reference() {
+        val a4 = InstrumentCatalog.tuning("violin", "standard")!!.byNumber(2)!! // A4
+        assertEquals(440.0, a4.frequency(440.0), 1e-9)
+        assertEquals(466.0, a4.frequency(466.0), 1e-9)
+        assertEquals(415.0, a4.frequency(415.0), 1e-9)
+        // Cents deviation is measured against the calibrated target: a 466 Hz
+        // tone is exactly in tune only when the reference is 466.
+        assertEquals(0.0, a4.centsFrom(466.0, 466.0), 0.01)
+        assertTrue(abs(a4.centsFrom(466.0, 440.0)) > 95.0)
+    }
+
+    @Test
     fun tuningFallsBackToDefault() {
         val t = InstrumentCatalog.tuning("violin", "nonexistent")!!
         assertEquals("standard", t.id)

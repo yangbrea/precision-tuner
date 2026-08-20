@@ -36,11 +36,25 @@ class SettingsRepository(context: Context) {
 
     fun setThemePreset(preset: ThemePreset) = update { it.copy(themePreset = preset) }
 
+    fun setLastSystemPreset(preset: ThemePreset) = update { it.copy(lastSystemPreset = preset) }
+
+    /**
+     * Restores every app setting to its initial value and clears the stored
+     * preferences. Custom tuning presets live in a separate store and are kept.
+     */
+    fun resetToDefaults() {
+        _settings.value = AppSettings()
+        prefs.edit().clear().apply()
+    }
+
     fun setVisualMode(mode: VisualMode) = update { it.copy(visualMode = mode) }
 
     fun setGaugeStyle(style: GaugeStyle) = update { it.copy(gaugeStyle = style) }
 
     fun setTemperament(temperament: Temperament) = update { it.copy(temperament = temperament) }
+
+    fun setReferenceA4(a4: Double) =
+        update { it.copy(referenceA4 = a4.coerceIn(MIN_A4, MAX_A4)) }
 
     fun setDetectionEngine(engine: DetectionEngine) = update { it.copy(detectionEngine = engine) }
 
@@ -62,9 +76,11 @@ class SettingsRepository(context: Context) {
             .putFloat(KEY_FILTER, next.filterStrength)
             .putString(KEY_THEME, next.themeMode.name)
             .putString(KEY_THEME_PRESET, next.themePreset.name)
+            .putString(KEY_LAST_SYSTEM_PRESET, next.lastSystemPreset.name)
             .putString(KEY_VISUAL, next.visualMode.name)
             .putString(KEY_GAUGE_STYLE, next.gaugeStyle.name)
             .putString(KEY_TEMPERAMENT, next.temperament.name)
+            .putFloat(KEY_REFERENCE_A4, next.referenceA4.toFloat())
             .putString(KEY_DETECTION_ENGINE, next.detectionEngine.name)
             .putString(KEY_INSTRUMENT, next.instrumentId)
             .putString(KEY_TUNING, next.tuningId)
@@ -89,6 +105,16 @@ class SettingsRepository(context: Context) {
             ThemeMode.valueOf(prefs.getString(KEY_THEME, null) ?: "")
         }.getOrDefault(ThemeMode.DARK)
         val themePreset = parseThemePreset(prefs.getString(KEY_THEME_PRESET, null))
+        // Seed the "last system preset" from the stored value; if it was never
+        // recorded, fall back to the currently active preset (unless it is
+        // classic custom mode) so switching to 系统主题 lands on a real preset.
+        val storedLastSystem = prefs.getString(KEY_LAST_SYSTEM_PRESET, null)
+        val lastSystemPreset = if (storedLastSystem != null) {
+            parseThemePreset(storedLastSystem)
+                .takeUnless { it == ThemePreset.CLASSIC } ?: ThemePreset.MIDNIGHT
+        } else {
+            themePreset.takeUnless { it == ThemePreset.CLASSIC } ?: ThemePreset.MIDNIGHT
+        }
         val visual = runCatching {
             VisualMode.valueOf(prefs.getString(KEY_VISUAL, null) ?: "")
         }.getOrDefault(VisualMode.SPECTRUM)
@@ -98,6 +124,8 @@ class SettingsRepository(context: Context) {
         val temperament = runCatching {
             Temperament.valueOf(prefs.getString(KEY_TEMPERAMENT, null) ?: "")
         }.getOrDefault(Temperament.EQUAL)
+        val referenceA4 = prefs.getFloat(KEY_REFERENCE_A4, 440f)
+            .toDouble().coerceIn(MIN_A4, MAX_A4)
         val storedEngine = prefs.getString(KEY_DETECTION_ENGINE, null)
         val detectionEngine = if (storedEngine == "CREPE_SHADOW") {
             DetectionEngine.CREPE_HYBRID
@@ -120,9 +148,11 @@ class SettingsRepository(context: Context) {
             filterStrength = filter,
             themeMode = theme,
             themePreset = themePreset,
+            lastSystemPreset = lastSystemPreset,
             visualMode = visual,
             gaugeStyle = gaugeStyle,
             temperament = temperament,
+            referenceA4 = referenceA4,
             detectionEngine = detectionEngine,
             instrumentId = instrument,
             tuningId = tuning,
@@ -138,11 +168,16 @@ class SettingsRepository(context: Context) {
         const val KEY_FILTER = "filterStrength"
         const val KEY_THEME = "theme"
         const val KEY_THEME_PRESET = "themePreset"
+        const val KEY_LAST_SYSTEM_PRESET = "lastSystemPreset"
         const val KEY_VISUAL = "visual"
         const val KEY_GAUGE_STYLE = "gaugeStyle"
         const val KEY_TEMPERAMENT = "temperament"
+        const val KEY_REFERENCE_A4 = "referenceA4"
         const val KEY_DETECTION_ENGINE = "detectionEngine"
         const val KEY_INSTRUMENT = "instrument"
         const val KEY_TUNING = "tuning"
+
+        const val MIN_A4 = 415.0
+        const val MAX_A4 = 466.0
     }
 }

@@ -13,6 +13,7 @@ import com.precisiontuner.pitch.HybridPitchDetector
 import com.precisiontuner.pitch.AutomaticStringState
 import com.precisiontuner.pitch.AutomaticStringTracker
 import com.precisiontuner.pitch.CrepeHybridArbitrator
+import com.precisiontuner.pitch.Fft
 import com.precisiontuner.pitch.InTuneCueGate
 import com.precisiontuner.pitch.NoiseFloorEstimator
 import com.precisiontuner.pitch.OnlinePitchTracker
@@ -20,9 +21,11 @@ import com.precisiontuner.pitch.Pitch
 import com.precisiontuner.pitch.PitchCandidate
 import com.precisiontuner.pitch.RollingPitchSmoother
 import com.precisiontuner.pitch.RmsOnsetDetector
+import com.precisiontuner.pitch.Spectrum
 import com.precisiontuner.pitch.TinyCrepeResult
 import com.precisiontuner.pitch.TinyCrepeShadow
 import com.precisiontuner.pitch.TinyCrepeShadowMetrics
+import com.precisiontuner.pitch.hann
 import com.precisiontuner.settings.AccentColor
 import com.precisiontuner.settings.AppSettings
 import com.precisiontuner.settings.DetectionEngine
@@ -52,6 +55,7 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlin.math.abs
 import kotlin.math.ln
+import kotlin.math.sqrt
 
 /**
  * Owns the audio capture → pitch detection → note mapping pipeline and exposes
@@ -111,6 +115,14 @@ class TunerViewModel(application: Application) : AndroidViewModel(application) {
     private val window = ShortArray(FRAME_SIZE)
     private val hop = ShortArray(HOP)
 
+    // Reusable display-only FFT buffers: the noise gate blanks the detector's
+    // spectrum, so gated frames render their own live FFT so the spectrum stays
+    // visible independently of the input threshold.
+    private val displayRe = DoubleArray(FRAME_SIZE)
+    private val displayIm = DoubleArray(FRAME_SIZE)
+    private val displayWin = hann(FRAME_SIZE)
+    private val displayMag = DoubleArray(FRAME_SIZE / 2)
+
     // Hysteresis: consecutive frames without an accepted pitch before the
     // displayed note is dropped (≈1.0s at 21.5 fps).
     private var missedFrames = 0
@@ -142,9 +154,7 @@ class TunerViewModel(application: Application) : AndroidViewModel(application) {
         resetDetection()
     }
 
-    fun setReferenceA4(a4: Double) {
-        _state.update { it.copy(referenceA4 = a4) }
-    }
+    fun updateReferenceA4(a4: Double) = settingsRepository.setReferenceA4(a4)
 
     fun updateAccent(accent: AccentColor) = settingsRepository.setAccent(accent)
 
@@ -162,7 +172,16 @@ class TunerViewModel(application: Application) : AndroidViewModel(application) {
 
     fun updateThemeMode(mode: ThemeMode) = settingsRepository.setThemeMode(mode)
 
-    fun updateThemePreset(preset: ThemePreset) = settingsRepository.setThemePreset(preset)
+    fun updateThemePreset(preset: ThemePreset) {
+        settingsRepository.setThemePreset(preset)
+        // Remember the last real (system) preset so switching back to 系统主题
+        // restores it; custom mode (CLASSIC) is not remembered.
+        if (preset != ThemePreset.CLASSIC) {
+            settingsRepository.setLastSystemPreset(preset)
+        }
+    }
+
+    fun resetSettings() = settingsRepository.resetToDefaults()
 
     fun updateVisualMode(mode: VisualMode) = settingsRepository.setVisualMode(mode)
 
@@ -248,7 +267,7 @@ class TunerViewModel(application: Application) : AndroidViewModel(application) {
         val currentSettings = settings.value
         val target = resolveTuning(currentSettings.instrumentId, currentSettings.tuningId)
             ?.byNumber(selectedNumber) ?: return
-        pianoReference.play(target.frequency)
+        pianoReference.play(target.frequency(currentSettings.referenceA4))
         // The reference is a single piano strike: reset the "playing" state once
         // it has decayed, so the button flips back to 播放 by itself.
         referenceToneJob?.cancel()
@@ -324,10 +343,28 @@ class TunerViewModel(application: Application) : AndroidViewModel(application) {
         resetDetection()
     }
 
+    /**
+     * Display-only FFT of the current filtered [window], rendered even when the
+     * noise gate rejects the frame so the spectrum stays visible independently
+     * of the input threshold. Reuses persistent buffers (no per-frame alloc).
+     */
+    private fun computeDisplaySpectrum(): List<Float> {
+        for (i in 0 until FRAME_SIZE) {
+            displayRe[i] = window[i] / 32768.0 * displayWin[i]
+            displayIm[i] = 0.0
+        }
+        Fft.transform(displayRe, displayIm)
+        for (i in displayMag.indices) {
+            displayMag[i] = sqrt(displayRe[i] * displayRe[i] + displayIm[i] * displayIm[i])
+        }
+        return Spectrum.build(displayMag, SAMPLE_RATE, FRAME_SIZE).toList()
+    }
+
     private fun processWindow() {
         val startedNanos = System.nanoTime()
         if (startedNanos < cueMuteUntilNanos) return // frozen while the cue plays
         val s = settings.value
+        val a4 = s.referenceA4
         val detectionEngine = effectiveDetectionEngine(s.detectionEngine)
         activeDetectionEngine = detectionEngine
         val mode = _state.value.mode
@@ -351,13 +388,13 @@ class TunerViewModel(application: Application) : AndroidViewModel(application) {
             noiseEstimator.observeGateRejected(rms)
             if (automaticMode) {
                 automaticStringState = automaticStringTracker.submit(
-                    tuning, emptyList(), false, false, 0.0, s.sensitivityThreshold.toDouble(),
+                    tuning, emptyList(), false, false, 0.0, s.sensitivityThreshold.toDouble(), a4,
                 )
                 _state.update { it.copy(activeString = automaticStringState.activeString?.number) }
             }
             val target = manualString ?: automaticStringTracker.activeString(tuning)
-            pitchTracker.submit(emptyList(), target?.frequency)
-            rejectFrame(target, waveform, emptyList(), rms, "noise_gate", 0, false, startedNanos)
+            pitchTracker.submit(emptyList(), target?.frequency(a4))
+            rejectFrame(target, waveform, computeDisplaySpectrum(), rms, "noise_gate", 0, false, startedNanos)
             return
         }
 
@@ -368,7 +405,7 @@ class TunerViewModel(application: Application) : AndroidViewModel(application) {
         // because the FFT/YIN broad path briefly reports its E2 sub-harmonic.
         val detectionTarget = manualString ?: previousAutomaticString
         val lockedPitch = detectionTarget?.let {
-            detector.detectLocked(window, SAMPLE_RATE, it.frequency)
+            detector.detectLocked(window, SAMPLE_RATE, it.frequency(a4))
         }
         val broadCandidates = detector.detectCandidates(window, SAMPLE_RATE)
         crepeValidationFrame++
@@ -433,7 +470,7 @@ class TunerViewModel(application: Application) : AndroidViewModel(application) {
         val spectrum = detector.lastSpectrum?.toList() ?: emptyList()
         val lockedAccepted = lockedPitch != null &&
             lockedPitch.confidence >= s.sensitivityThreshold.toDouble() &&
-            abs(detectionTarget.centsFrom(lockedPitch.frequency)) <= MANUAL_LOCK_CENTS
+            abs(detectionTarget.centsFrom(lockedPitch.frequency, a4)) <= MANUAL_LOCK_CENTS
 
         if (automaticMode) {
             automaticStringState = automaticStringTracker.submit(
@@ -443,6 +480,7 @@ class TunerViewModel(application: Application) : AndroidViewModel(application) {
                 onset = onset,
                 signalToNoiseRatio = rms / noiseEstimator.noiseFloor.coerceAtLeast(1e-9),
                 minimumVoicedProbability = s.sensitivityThreshold.toDouble(),
+                a4 = a4,
             )
             _state.update { it.copy(activeString = automaticStringState.activeString?.number) }
         }
@@ -455,7 +493,7 @@ class TunerViewModel(application: Application) : AndroidViewModel(application) {
             addAll(engineCandidates.filter { candidate ->
                 candidate.voicedProbability >= s.sensitivityThreshold.toDouble() &&
                     (manualString != null || mode != TunerMode.INSTRUMENT ||
-                        lockedString?.let { abs(it.centsFrom(candidate.frequency)) <= AUTO_TARGET_CENTS } == true)
+                        lockedString?.let { abs(it.centsFrom(candidate.frequency, a4)) <= AUTO_TARGET_CENTS } == true)
             })
             if (acceptedLockedPitch != null && !primaryUsesNeural) {
                 val confidence = acceptedLockedPitch.confidence
@@ -474,13 +512,13 @@ class TunerViewModel(application: Application) : AndroidViewModel(application) {
 
         if (candidates.isEmpty()) {
             noiseEstimator.observeUnvoiced(rms)
-            pitchTracker.submit(emptyList(), lockedString?.frequency, onset)
+            pitchTracker.submit(emptyList(), lockedString?.frequency(a4), onset)
             rejectFrame(lockedString, waveform, spectrum, rms, "periodicity", 0, onset, startedNanos)
             return
         }
 
         missedFrames = 0
-        val tracked = pitchTracker.submit(candidates, lockedString?.frequency, onset)
+        val tracked = pitchTracker.submit(candidates, lockedString?.frequency(a4), onset)
         if (tracked == null) {
             inTuneCueGate.observeInvalid()
             tuneVisualStabilizer.observeInvalid()
@@ -508,7 +546,6 @@ class TunerViewModel(application: Application) : AndroidViewModel(application) {
         if (detectionEngine == DetectionEngine.CREPE_HYBRID) {
             crepeHybridArbitrator.observeAccepted(rawFreq)
         }
-        val a4 = _state.value.referenceA4
 
         // Instrument mode always reports deviation from a target in the active
         // tuning. Chromatic mode resolves against the selected temperament.
@@ -521,7 +558,7 @@ class TunerViewModel(application: Application) : AndroidViewModel(application) {
         val smoothedFreq = pitchSmoother.push(noteKey, rawFreq) ?: rawFreq
 
         val phase = if (lockedString != null &&
-            abs(lockedString.centsFrom(smoothedFreq)) > MANUAL_LOCK_CENTS
+            abs(lockedString.centsFrom(smoothedFreq, a4)) > MANUAL_LOCK_CENTS
         ) DetectionPhase.OUT_OF_RANGE else DetectionPhase.TRACKING
         val observedNote = NoteMapper.noteFromFrequency(smoothedFreq, a4)
 
@@ -533,7 +570,7 @@ class TunerViewModel(application: Application) : AndroidViewModel(application) {
             noteName = targetString.noteName
             midi = targetString.midi
             octave = targetString.midi / 12 - 1
-            cents = targetString.centsFrom(smoothedFreq)
+            cents = targetString.centsFrom(smoothedFreq, a4)
         } else {
             val note = Temperaments.nearestNote(smoothedFreq, a4, s.temperament)
             noteName = note.name

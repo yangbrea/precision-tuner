@@ -1,4 +1,5 @@
 <resources>
     <!-- Match the raster foreground canvas so adaptive-icon masks have no visible seam. -->
     <color name="ic_launcher_background">#010815</color>
+    <color name="splash_background">#010815</color>
 </resources>

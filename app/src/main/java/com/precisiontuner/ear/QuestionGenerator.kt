@@ -96,12 +96,21 @@ object QuestionGenerator {
         val pool = DifficultyPresets.staffPool(difficulty)
         require(pool.size >= OPTION_COUNT) { "staff pool too small: ${pool.size}" }
         val answerMidi = pool[random.nextInt(pool.size)]
-        val answer = StaffNotation.fromMidi(answerMidi, preferFlat = random.nextBoolean())
+        val preferFlat = random.nextBoolean()
+        val answer = StaffNotation.fromMidi(answerMidi, preferFlat)
+        // Distractors share the answer's accidental context so the options can't
+        // be eliminated by accidentals alone: a natural answer only gets natural
+        // options, and an accidental answer only gets options spelled with the
+        // same ♯/♭ sign (same preferFlat ⇒ same accidental kind for black keys).
         val distractors = pool
+            .asSequence()
             .filter { it != answerMidi }
-            .shuffled(random)
-            .map { StaffNotation.fromMidi(it, preferFlat = random.nextBoolean()).displayName }
+            .map { StaffNotation.fromMidi(it, preferFlat) }
+            .filter { it.accidental == answer.accidental }
+            .map { it.displayName }
             .distinct()
+            .shuffled(random)
+            .toList()
         val options = shuffledOptions(answer.displayName, distractors, random)
         return QuizQuestion(
             type = ExerciseType.STAFF_READING,

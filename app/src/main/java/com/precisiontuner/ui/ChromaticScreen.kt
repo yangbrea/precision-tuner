@@ -11,17 +11,16 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.precisiontuner.TuneVisualState
@@ -37,7 +36,6 @@ fun ChromaticScreen(
     state: TunerState,
     settings: AppSettings,
     onTemperamentChange: (Temperament) -> Unit,
-    onReferenceChange: (Double) -> Unit,
 ) {
     Box(modifier = Modifier.fillMaxSize()) {
         NeonScreenBackground(
@@ -53,7 +51,7 @@ fun ChromaticScreen(
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
         Text(
-            text = "${settings.temperament.label} · A4 = ${state.referenceA4.roundToInt()} Hz",
+            text = "${settings.temperament.label} · A4 = ${settings.referenceA4.roundToInt()} Hz",
             fontSize = 16.sp,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -61,9 +59,8 @@ fun ChromaticScreen(
         Spacer(Modifier.height(8.dp))
         TemperamentRow(selected = settings.temperament, onSelect = onTemperamentChange)
 
-        // Dial-style gauges (dial / trail) are tall, so they need a smaller
-        // gauge + spectrum to leave the A4 reference panel breathing room at the
-        // bottom (never squeezed).
+        // Dial-style gauges (dial / trail) are tall, so the gauge and spectrum
+        // are sized a bit smaller to keep everything on one screen.
         val tall = settings.gaugeStyle.isTall
 
         Spacer(Modifier.height(10.dp))
@@ -96,12 +93,16 @@ fun ChromaticScreen(
             }
 
         Spacer(Modifier.height(2.dp))
+        // The A4 reference slider moved to settings, so the freed bottom area
+        // is now given to the visualization: it fills the remaining vertical
+        // space instead of a fixed strip (with a floor so it never collapses).
         if (settings.visualMode == VisualMode.WAVEFORM) {
             WaveformView(
                 waveform = state.waveform,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(if (tall) 44.dp else 56.dp),
+                    .weight(1f)
+                    .heightIn(min = 48.dp),
             )
         } else {
             SpectrumView(
@@ -109,48 +110,12 @@ fun ChromaticScreen(
                 detectedFrequency = state.detectedFrequency,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(if (tall) 44.dp else 56.dp),
+                    .weight(1f)
+                    .heightIn(min = 48.dp),
             )
         }
 
-        Spacer(
-            modifier = if (tall) {
-                Modifier.weight(1f) // tall dial: pin the reference block to the bottom
-            } else {
-                Modifier.height(16.dp) // short rail: keep it right under the spectrum
-            },
-        )
-
-        // A4 reference pitch. The live A4 value is already shown in the header
-        // ("· A4 = 440 Hz"), so the slider only needs its centered label.
-            NeonPanel(modifier = Modifier.fillMaxWidth()) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 14.dp, vertical = if (tall) 10.dp else 8.dp),
-                ) {
-                    Text(
-                        text = "REFERENCE · A4 ${state.referenceA4.roundToInt()} Hz",
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.primary,
-                        textAlign = TextAlign.Center,
-                        modifier = Modifier.fillMaxWidth(),
-                    )
-                    Spacer(Modifier.height(if (tall) 10.dp else 6.dp))
-                    Slider(
-                        value = state.referenceA4.toFloat(),
-                        onValueChange = { onReferenceChange(it.toDouble()) },
-                        valueRange = 415f..466f,
-                        steps = 50,
-                    )
-                }
-            }
-
-        // Keep the reference controls visually separate from the persistent
-        // navigation bar. The larger dial consumes most of the flexible space,
-        // so it needs an explicit gap instead of relying on Spacer(weight).
-            Spacer(Modifier.height(if (tall) 8.dp else 6.dp))
+        Spacer(Modifier.height(12.dp))
         }
     }
 }

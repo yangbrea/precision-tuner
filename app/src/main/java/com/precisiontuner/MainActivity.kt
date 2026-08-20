@@ -23,6 +23,9 @@ class MainActivity : ComponentActivity() {
     private val earTrainingViewModel: EarTrainingViewModel by viewModels()
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        // The manifest theme draws the system launch screen. Switch the real
+        // activity to the normal Compose host theme before creating its window.
+        setTheme(R.style.Theme_Tunner)
         super.onCreate(savedInstanceState)
         setContent {
             val settings by viewModel.settings.collectAsStateWithLifecycle()

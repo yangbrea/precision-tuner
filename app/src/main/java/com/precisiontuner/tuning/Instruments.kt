@@ -17,12 +17,15 @@ data class InstrumentString(
     val fullNote: String,
     val midi: Int,
 ) {
-    /** Equal-temperament frequency for the current A4 reference. */
-    val frequency: Double get() = NoteMapper.frequencyFromMidi(midi)
+    /** Equal-temperament frequency for the default (440 Hz) A4 reference. */
+    val frequency: Double get() = frequency(NoteMapper.DEFAULT_A4)
+
+    /** Equal-temperament frequency for the given A4 reference (concert pitch). */
+    fun frequency(a4: Double): Double = NoteMapper.frequencyFromMidi(midi, a4)
 
     /** Signed deviation of [detectedFrequency] from this string's target. */
-    fun centsFrom(detectedFrequency: Double): Double =
-        1200.0 * ln(detectedFrequency / frequency) / ln(2.0)
+    fun centsFrom(detectedFrequency: Double, a4: Double = NoteMapper.DEFAULT_A4): Double =
+        1200.0 * ln(detectedFrequency / frequency(a4)) / ln(2.0)
 }
 
 /** A named tuning of an instrument: an ordered list of open-string notes. */
@@ -36,9 +39,9 @@ data class Tuning(
         strings.minByOrNull { abs(it.midi - midi) }
 
     /** The target string nearest to [frequency] on a logarithmic pitch scale. */
-    fun nearestString(frequency: Double): InstrumentString? {
+    fun nearestString(frequency: Double, a4: Double = NoteMapper.DEFAULT_A4): InstrumentString? {
         if (!frequency.isFinite() || frequency <= 0.0) return null
-        return strings.minByOrNull { abs(ln(frequency / it.frequency)) }
+        return strings.minByOrNull { abs(ln(frequency / it.frequency(a4))) }
     }
 
     fun byNumber(number: Int): InstrumentString? = strings.firstOrNull { it.number == number }

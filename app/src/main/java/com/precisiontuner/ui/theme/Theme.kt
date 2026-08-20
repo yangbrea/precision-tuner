@@ -41,6 +41,11 @@ internal fun themePalette(preset: ThemePreset): ThemePalette = when (preset) {
         Color(0xFF6FCF97), Color(0xFF082116), Color(0xFFE9C46A), Color(0xFF302400),
         Color(0xFFE7F2EA), Color(0xFFB7C7BB), Color(0xFF657569),
     )
+    ThemePreset.PRO_TECH -> ThemePalette(
+        true, Color(0xFF0B0D0B), Color(0xFF131613), Color(0xFF1D221D),
+        Color(0xFF00E676), Color(0xFF00300F), Color(0xFF66BB6A), Color(0xFF0B2E0D),
+        Color(0xFFE8F2EA), Color(0xFFB2C4B6), Color(0xFF71857A),
+    )
     ThemePreset.GRAPHITE_ROSE -> ThemePalette(
         true, Color(0xFF151217), Color(0xFF211B23), Color(0xFF302832),
         Color(0xFFF48FB1), Color(0xFF32101E), Color(0xFFB39DDB), Color(0xFF251333),
@@ -56,10 +61,15 @@ internal fun themePalette(preset: ThemePreset): ThemePalette = when (preset) {
         Color(0xFF007C91), Color.White, Color(0xFF3D6F73), Color.White,
         Color(0xFF10282C), Color(0xFF50676A), Color(0xFF789094),
     )
-    ThemePreset.LAVENDER -> ThemePalette(
-        false, Color(0xFFF5F1FA), Color(0xFFFDFBFF), Color(0xFFE8E0F0),
-        Color(0xFF6D4DB3), Color.White, Color(0xFF8E5A78), Color.White,
-        Color(0xFF271F30), Color(0xFF675D6D), Color(0xFF908398),
+    ThemePreset.BLACK_GOLD -> ThemePalette(
+        true, Color(0xFF0B0B0D), Color(0xFF15151A), Color(0xFF22222B),
+        Color(0xFFD9B45F), Color(0xFF241A00), Color(0xFFB08D42), Color(0xFF241A00),
+        Color(0xFFF2ECDD), Color(0xFFB3AC9C), Color(0xFF7C7565),
+    )
+    ThemePreset.SAKURA -> ThemePalette(
+        false, Color(0xFFFFF7FC), Color.White, Color(0xFFF8E4F2),
+        Color(0xFFC74678), Color.White, Color(0xFF7457C5), Color.White,
+        Color(0xFF2F202B), Color(0xFF715B69), Color(0xFFC7AABD),
     )
     ThemePreset.CLASSIC -> error("Classic colors are built from the user's settings")
 }

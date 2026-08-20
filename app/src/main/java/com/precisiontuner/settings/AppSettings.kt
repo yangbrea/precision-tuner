@@ -6,20 +6,28 @@ import com.precisiontuner.tuning.Temperament
 /** Dark vs light app theme. */
 enum class ThemeMode { DARK, LIGHT }
 
-/** Complete system color presets. [CLASSIC] keeps the user's custom controls. */
+/** Complete system color presets. [CLASSIC] is the "自定义设置" custom mode. */
 enum class ThemePreset(val label: String, val lockedMode: ThemeMode?) {
-    CLASSIC("经典自定义", null),
+    CLASSIC("自定义设置", null),
     MIDNIGHT("午夜蓝", ThemeMode.DARK),
     FOREST("森林", ThemeMode.DARK),
+    PRO_TECH("专业", ThemeMode.DARK),
     GRAPHITE_ROSE("石墨玫瑰", ThemeMode.DARK),
     WARM_PAPER("暖纸", ThemeMode.LIGHT),
     OCEAN("海洋", ThemeMode.LIGHT),
-    LAVENDER("薰衣草", ThemeMode.LIGHT),
+    BLACK_GOLD("黑金", ThemeMode.DARK),
+    SAKURA("樱花粉", ThemeMode.LIGHT),
 }
 
-fun parseThemePreset(storedValue: String?): ThemePreset = runCatching {
-    ThemePreset.valueOf(storedValue.orEmpty())
-}.getOrDefault(ThemePreset.CLASSIC)
+fun parseThemePreset(storedValue: String?): ThemePreset = when (storedValue) {
+    // Legacy preset renamed to 黑金 when the preset system was updated.
+    "LAVENDER" -> ThemePreset.BLACK_GOLD
+    // Legacy 桃色 was renamed to 樱花粉 with a new sakura palette.
+    "PEACH" -> ThemePreset.SAKURA
+    else -> runCatching {
+        ThemePreset.valueOf(storedValue.orEmpty())
+    }.getOrDefault(ThemePreset.CLASSIC)
+}
 
 /** Which visualization is shown in the tuner screens. */
 enum class VisualMode { SPECTRUM, WAVEFORM }
@@ -52,9 +60,13 @@ data class AppSettings(
     val filterStrength: Float = 0.5f, // 0..1, 0 = off
     val themeMode: ThemeMode = ThemeMode.DARK,
     val themePreset: ThemePreset = ThemePreset.CLASSIC,
+    /** Last system (non-classic) preset, restored when switching back to 系统主题. */
+    val lastSystemPreset: ThemePreset = ThemePreset.MIDNIGHT,
     val visualMode: VisualMode = VisualMode.SPECTRUM,
     val gaugeStyle: GaugeStyle = GaugeStyle.RAIL,
     val temperament: Temperament = Temperament.EQUAL,
+    /** Concert-pitch reference A4 in Hz (415–466); applies to every tuning mode. */
+    val referenceA4: Double = 440.0,
     val detectionEngine: DetectionEngine = DetectionEngine.CREPE_HYBRID,
 
     // Selected instrument & tuning for the instrument tuner.

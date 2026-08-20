@@ -150,6 +150,28 @@ class QuestionGeneratorTest {
     }
 
     @Test
+    fun `staff options share the answer's accidental context`() {
+        for (difficulty in Difficulty.entries) {
+            repeat(200) {
+                val q = question(ExerciseType.STAFF_READING, difficulty, Random(it))
+                val answerAccidental = q.staffNotation!!.accidental
+                q.options.forEach { option ->
+                    val optionAccidental = when {
+                        option.contains("♯") -> com.precisiontuner.ear.Accidental.SHARP
+                        option.contains("♭") -> com.precisiontuner.ear.Accidental.FLAT
+                        else -> com.precisiontuner.ear.Accidental.NATURAL
+                    }
+                    assertEquals(
+                        "option '$option' accidental differs from answer '$answerAccidental'",
+                        answerAccidental,
+                        optionAccidental,
+                    )
+                }
+            }
+        }
+    }
+
+    @Test
     fun `note pool grows with difficulty`() {
         val easy = question(ExerciseType.NOTE, difficulty = Difficulty.EASY, random = Random(1))
         val hard = question(ExerciseType.NOTE, difficulty = Difficulty.HARD, random = Random(1))

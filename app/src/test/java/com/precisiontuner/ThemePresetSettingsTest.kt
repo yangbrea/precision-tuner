@@ -17,6 +17,21 @@ class ThemePresetSettingsTest {
     }
 
     @Test
+    fun legacyLavenderMigratesToBlackGold() {
+        assertEquals(ThemePreset.BLACK_GOLD, parseThemePreset("LAVENDER"))
+    }
+
+    @Test
+    fun legacyPeachMigratesToSakura() {
+        assertEquals(ThemePreset.SAKURA, parseThemePreset("PEACH"))
+    }
+
+    @Test
+    fun lastSystemPresetDefaultsToMidnight() {
+        assertEquals(ThemePreset.MIDNIGHT, AppSettings().lastSystemPreset)
+    }
+
+    @Test
     fun systemPresetsLockTheirDeclaredMode() {
         ThemePreset.entries.filter { it != ThemePreset.CLASSIC }.forEach { preset ->
             val opposite = if (preset.lockedMode == ThemeMode.DARK) ThemeMode.LIGHT else ThemeMode.DARK
