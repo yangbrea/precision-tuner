@@ -8,7 +8,9 @@
 </p>
 
 A precision all-in-one tuner for Android: instrument tuner, chromatic tuner with
-historical temperaments, and a metronome — with AI-assisted pitch detection.
+historical temperaments, a metronome, and an ear-training quiz module — with
+AI-assisted pitch detection (pYIN-lite + Tiny CREPE), a full multi-level
+settings system with preset themes, and in-app updates.
 
 ## Screenshots
 
@@ -18,37 +20,42 @@ historical temperaments, and a metronome — with AI-assisted pitch detection.
 
 ## Features
 
-- **Instrument tuner** — guitar, bass, ukulele, violin and more, with automatic
-  string detection, manual string selection, and persistent custom tuning presets.
-- **Chromatic tuner** — with three temperaments:
-  - 十二平均律 (12-TET equal temperament)
-  - 五度相生律 (Pythagorean tuning, pure fifths 3:2)
-  - 纯律 (just intonation, 5-limit Ptolemaic)
-  - Adjustable A4 reference (415–466 Hz) anchored across all temperaments.
-- **AI-assisted detection** — hybrid pipeline: FFT coarse localization + pYIN-lite
-  refinement, arbitrated against a bundled Tiny CREPE neural model (LiteRT) to
-  reject subharmonic errors (e.g. E4 misread as A2 from string resonance). The
-  neural model is built-time selectable: `tiny` (986 KB) / `small` (3.3 MB) /
-  `full` (44.5 MB) — `small` is the default and measured sweet spot.
-- **Metronome** — BPM presets, tap tempo, time signatures, subdivisions
-  (eighths / triplets / sixteenths), downbeat accent, circular progress ring.
+- **乐器调音 (Instrument tuner)** — guitar, bass, ukulele, violin, viola, cello,
+  double bass, 中阮, 琵琶, 二胡, 大阮 with automatic string detection, manual
+  string selection, per-string piano reference tones, and persistent custom
+  tuning presets.
+- **半音阶调音 (Chromatic tuner)** — three temperaments: 十二平均律 (12-TET),
+  五度相生律 (Pythagorean), 纯律 (just intonation); a **global A4 reference**
+  (415–466 Hz) that applies to every tuning mode, the piano reference tone, and
+  survives restarts.
+- **AI-assisted detection** — hybrid pipeline: FFT coarse localization +
+  pYIN-lite refinement, arbitrated against a bundled Tiny CREPE neural model
+  (LiteRT) to reject subharmonic errors. Configurable noise gate, sensitivity
+  threshold, smoothing window and low-pass filter. The neural model is
+  built-time selectable (`tiny` / `small` / `full`).
+- **节拍器 (Metronome)** — BPM presets, tap tempo, time signatures, subdivisions
+  (eighths / triplets / sixteenths), downbeat accent, circular progress ring,
+  and an instant first-click start (no priming delay).
 - **视听练耳 (Ear training)** — a game-like quiz module: 单音识别 (note),
-  音程听辨 (interval), 和弦听辨 (chord) and 音阶听辨 (scale) recognition, each
-  with three modes — 无尽 (endless), 挑战 (challenge: five lives) and 测试
-  (fixed-length test) — plus a placeholder 五线谱识谱 (staff reading) tab.
-  A system difficulty preset (简单/中等/困难) drives the question pools, and
-  questions are played with the bundled piano samples and answered as 4-option
-  multiple choice, with game-style feedback (pulse play button, wrong-answer
-  shake, accuracy ring, lives hearts, correct/wrong sound cues).
-- **Visualizations** — spectrum and time-domain waveform views; three gauge
-  styles (precision rail / dial / scrolling pitch waterfall) in a flat dark-light
-  theme.
+  音程听辨 (interval), 和弦听辨 (chord), 音阶听辨 (scale), 五线谱识谱 (staff
+  reading) and 节奏听写 (rhythm dictation). Each recognition exercise offers
+  无尽 (endless), 挑战 (challenge, five lives) and 测试 (fixed-length test)
+  modes with 简单/中等/困难 difficulty presets, played on bundled piano samples
+  with game-style feedback (accuracy ring, lives, sound cues).
+- **设置 (Settings)** — multi-level sections: 主题 (themes), 调音选项 (tuning),
+  调弦预设 (presets), 版本信息 (about). Eight system theme presets (午夜蓝 /
+  森林 / 专业 / 石墨玫瑰 / 暖纸 / 海洋 / 黑金 / 樱花粉) plus custom dark/light
+  mode with six accent colors; **恢复默认设置** one-tap reset; **检查更新** with
+  in-app APK download and auto-install.
+- **Visualizations** — live spectrum (power-ratio scale with display ceiling,
+  always visible even below the noise gate) and time-domain waveform; three
+  gauge styles (precision rail / dial / scrolling pitch waterfall); dark/light
+  themes with smooth transitions.
 
-## Screenshots
+## Demo video script
 
-| Instrument tuner | Chromatic tuner | Metronome |
-| :-: | :-: | :-: |
-| <img src="screenshots/instrument.png" width="240" alt="Instrument tuner"/> | <img src="screenshots/chromatic.png" width="240" alt="Chromatic tuner"/> | <img src="screenshots/metronome.png" width="240" alt="Metronome"/> |
+See [docs/demo-script.md](docs/demo-script.md) for a scene-by-scene guide to
+recording a feature walkthrough video.
 
 ## Build
 
@@ -78,6 +85,10 @@ The CREPE build is arm64-only; the `--no-crepe` build keeps all ABIs. See
 
 - Android 7.0+ (minSdk 24), 64-bit arm for the CREPE build.
 - Microphone permission for tuning.
+
+## 联系作者
+
+- QQ: 1005028266 (app 内"版本信息"页可点击复制)
 
 ## License
 

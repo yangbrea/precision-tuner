@@ -5,6 +5,7 @@ import android.content.Context
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.precisiontuner.audio.MetronomeEngine
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -34,30 +35,63 @@ class MetronomeViewModel(application: Application) : AndroidViewModel(applicatio
         if (playJob != null) return
         _state.update { it.copy(isPlaying = true, currentBeat = 0) }
         playJob = viewModelScope.launch(Dispatchers.Default) {
-            engine.start()
-            var beat = 1
-            var nextNanos = System.nanoTime()
+            val s0 = _state.value
+            // Queue beat 1 at the head of the buffer; it sounds as soon as the
+            // audio path starts (no silence priming delay, no wall-clock drift).
+            engine.start(firstAccent = s0.accentEnabled, firstVolume = s0.volume)
+            _state.update { it.copy(currentBeat = 1) }
+            val schedule = MetronomeSchedule(
+                sampleRate = MetronomeEngine.SAMPLE_RATE,
+                bpm = s0.bpm,
+                subdivision = s0.subdivision,
+                beatsPerBar = s0.beatsPerBar,
+                accentEnabled = s0.accentEnabled,
+            )
             while (isActive) {
                 val s = _state.value
-                val beatNanos = (60_000_000_000.0 / s.bpm).toLong()
-                val subNanos = beatNanos / s.subdivision
-                for (sub in 0 until s.subdivision) {
-                    val downbeat = sub == 0
-                    engine.playClick(
-                        accent = downbeat && s.accentEnabled && beat == 1,
-                        subdivision = !downbeat,
-                        volume = if (downbeat) s.volume else s.volume * SUB_VOLUME,
-                    )
-                    if (downbeat) _state.update { it.copy(currentBeat = beat) }
-
-                    // NanoTime-based scheduling avoids cumulative drift.
-                    nextNanos += subNanos
-                    val waitMillis = (nextNanos - System.nanoTime()) / 1_000_000
-                    if (waitMillis > 0) delay(waitMillis)
+                schedule.update(s.bpm, s.subdivision, s.beatsPerBar, s.accentEnabled)
+                val click = schedule.nextClick()
+                // Feed silence up to the click's start frame. All writes are
+                // non-blocking: when the buffer is full they return 0 and we
+                // retry after a short pause, so the queue is paced by actual
+                // playback consumption and the heard intervals are exactly the
+                // frame spacing.
+                while (isActive && engine.framesQueued < click.startFrame) {
+                    val want = (click.startFrame - engine.framesQueued)
+                        .coerceAtMost(MetronomeEngine.SILENCE_CHUNK.toLong())
+                        .toInt()
+                    retrySilence(this) { engine.writeSilence(want) }
                 }
-                beat = if (beat >= s.beatsPerBar) 1 else beat + 1
+                if (!isActive) break
+                retryClick(this) {
+                    engine.playClick(
+                        accent = click.accent,
+                        subdivision = click.subdivision,
+                        volume = s.volume * if (click.downbeat) 1f else SUB_VOLUME,
+                    )
+                }
+                if (click.downbeat) _state.update { it.copy(currentBeat = schedule.currentBeat()) }
             }
         }
+    }
+
+    /**
+     * Keeps attempting a non-blocking silence write until it makes progress. A
+     * 0 return means the track buffer is full (playback has not drained
+     * enough), so we pause briefly and retry; a negative return means the
+     * track is gone (e.g. stopped), so we give up.
+     */
+    private suspend fun retrySilence(scope: CoroutineScope, write: () -> Int) {
+        while (scope.isActive) {
+            val w = write()
+            if (w != 0) return
+            delay(2)
+        }
+    }
+
+    /** Keeps resuming the pending click until the whole click has been queued. */
+    private suspend fun retryClick(scope: CoroutineScope, write: () -> Boolean) {
+        while (scope.isActive && !write()) delay(2)
     }
 
     fun stop() {

@@ -43,6 +43,7 @@ import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -274,6 +275,13 @@ fun AboutScreen() {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var updateState by remember { mutableStateOf<UpdateState>(UpdateState.Idle) }
+    var qqCopied by remember { mutableStateOf(false) }
+    LaunchedEffect(qqCopied) {
+        if (qqCopied) {
+            kotlinx.coroutines.delay(1500)
+            qqCopied = false
+        }
+    }
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -296,6 +304,25 @@ fun AboutScreen() {
             fontSize = 14.sp,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
+
+        Spacer(Modifier.height(8.dp))
+        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+        Row(
+            modifier = Modifier
+                .clip(RoundedCornerShape(8.dp))
+                .clickable {
+                    clipboard.setPrimaryClip(android.content.ClipData.newPlainText("QQ", AUTHOR_QQ))
+                    qqCopied = true
+                }
+                .padding(horizontal = 10.dp, vertical = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = if (qqCopied) "作者 QQ:$AUTHOR_QQ(已复制)" else "作者 QQ:$AUTHOR_QQ",
+                fontSize = 13.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
 
         Spacer(Modifier.height(16.dp))
         OutlinedButton(
@@ -453,6 +480,9 @@ private sealed interface UpdateState {
     data class DownloadFailed(val release: RemoteRelease) : UpdateState
     data object Failed : UpdateState
 }
+
+/** Author contact shown on the about page; tap to copy. */
+private const val AUTHOR_QQ = "1005028266"
 
 @Composable
 private fun AboutItem(text: String) {
