@@ -52,11 +52,6 @@ settings system with preset themes, and in-app updates.
   gauge styles (precision rail / dial / scrolling pitch waterfall); dark/light
   themes with smooth transitions.
 
-## Demo video script
-
-See [docs/demo-script.md](docs/demo-script.md) for a scene-by-scene guide to
-recording a feature walkthrough video.
-
 ## Build
 
 The repo pins a writable Gradle home into the workspace (see `build.sh` for the

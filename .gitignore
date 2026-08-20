@@ -23,3 +23,6 @@ __pycache__/
 # Release artifacts
 *.apk
 *.idsig
+
+# 本地录屏辅助脚本(不上传)
+docs/
