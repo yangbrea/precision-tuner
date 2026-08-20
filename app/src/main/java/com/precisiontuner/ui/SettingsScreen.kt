@@ -1,7 +1,9 @@
 package com.precisiontuner.ui
 
+import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import android.os.Environment
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -31,6 +33,7 @@ import androidx.compose.material.icons.filled.Restore
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.SegmentedButton
@@ -57,6 +60,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.graphics.drawable.toBitmap
+import androidx.core.content.FileProvider
 import com.precisiontuner.BuildConfig
 import com.precisiontuner.R
 import com.precisiontuner.settings.AccentColor
@@ -70,6 +74,7 @@ import com.precisiontuner.ui.theme.themePalette
 import com.precisiontuner.update.RemoteRelease
 import com.precisiontuner.update.UpdateChecker
 import com.precisiontuner.update.VersionCompare
+import java.io.File
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 
@@ -295,7 +300,9 @@ fun AboutScreen() {
         Spacer(Modifier.height(16.dp))
         OutlinedButton(
             onClick = {
-                if (updateState == UpdateState.Checking) return@OutlinedButton
+                if (updateState is UpdateState.Checking || updateState is UpdateState.Downloading) {
+                    return@OutlinedButton
+                }
                 updateState = UpdateState.Checking
                 scope.launch {
                     updateState = when (val result = UpdateChecker.checkLatest()) {
@@ -320,6 +327,8 @@ fun AboutScreen() {
                 UpdateState.Checking -> "正在检查…"
                 UpdateState.Latest -> "已是最新版本"
                 is UpdateState.Available -> "发现新版本 ${state.release.tagName}"
+                is UpdateState.Downloading -> "正在下载 ${(state.progress * 100).roundToInt()}%"
+                is UpdateState.DownloadFailed -> "下载或安装失败,请重试"
                 UpdateState.Failed -> "检查失败,请检查网络后重试"
             },
             fontSize = 12.sp,
@@ -347,24 +356,91 @@ fun AboutScreen() {
     }
 
     val available = updateState as? UpdateState.Available
-    if (available != null) {
-        AlertDialog(
+    val downloading = updateState as? UpdateState.Downloading
+    val downloadFailed = updateState as? UpdateState.DownloadFailed
+    when {
+        available != null -> AlertDialog(
             onDismissRequest = { updateState = UpdateState.Idle },
             title = { Text("发现新版本") },
-            text = { Text("最新版本:${available.release.tagName}\n是否前往 GitHub 下载?") },
+            text = { Text("最新版本:${available.release.tagName}\n确定下载并安装?") },
             confirmButton = {
                 TextButton(onClick = {
-                    updateState = UpdateState.Idle
-                    context.startActivity(
-                        Intent(Intent.ACTION_VIEW, Uri.parse(available.release.htmlUrl)),
-                    )
-                }) { Text("去下载") }
+                    updateState = UpdateState.Downloading(available.release, 0f)
+                    scope.launch {
+                        val apkUrl = available.release.apkUrl
+                        if (apkUrl == null) {
+                            // No APK asset: fall back to the release page in the browser.
+                            updateState = UpdateState.Idle
+                            context.startActivity(
+                                Intent(Intent.ACTION_VIEW, Uri.parse(available.release.htmlUrl)),
+                            )
+                            return@launch
+                        }
+                        val dir = context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS)
+                        val file = File(dir, "precision-tuner-${available.release.tagName}.apk")
+                        file.delete()
+                        val downloaded = UpdateChecker.downloadApk(
+                            url = apkUrl,
+                            destination = file,
+                            onProgress = { updateState = UpdateState.Downloading(available.release, it) },
+                        )
+                        if (downloaded != null && downloaded.length() > 0) {
+                            updateState = UpdateState.Idle
+                            if (!launchInstaller(context, downloaded)) {
+                                updateState = UpdateState.DownloadFailed(available.release)
+                            }
+                        } else {
+                            updateState = UpdateState.DownloadFailed(available.release)
+                        }
+                    }
+                }) { Text("下载并安装") }
             },
             dismissButton = {
-                TextButton(onClick = { updateState = UpdateState.Idle }) { Text("稍后") }
+                TextButton(onClick = { updateState = UpdateState.Idle }) { Text("取消") }
+            },
+        )
+        downloading != null -> AlertDialog(
+            onDismissRequest = { /* keep open while downloading */ },
+            title = { Text("正在下载") },
+            text = {
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    Text("版本 ${downloading.release.tagName} · ${(downloading.progress * 100).roundToInt()}%")
+                    Spacer(Modifier.height(12.dp))
+                    LinearProgressIndicator(
+                        progress = { downloading.progress },
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+            },
+            confirmButton = {},
+        )
+        downloadFailed != null -> AlertDialog(
+            onDismissRequest = { updateState = UpdateState.Idle },
+            title = { Text("下载或安装失败") },
+            text = { Text("请检查网络后重试。") },
+            confirmButton = {
+                TextButton(onClick = { updateState = UpdateState.Idle }) { Text("关闭") }
             },
         )
     }
+}
+
+/**
+ * Hands the downloaded APK to the system package installer. Returns false when
+ * no installer can handle the intent (caller shows an error).
+ */
+private fun launchInstaller(context: Context, apk: File): Boolean = try {
+    val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", apk)
+    context.startActivity(
+        Intent(Intent.ACTION_VIEW).apply {
+            setDataAndType(uri, "application/vnd.android.package-archive")
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        },
+    )
+    true
+} catch (e: Exception) {
+    false
 }
 
 /** UI state of the manual update check on the about page. */
@@ -373,6 +449,8 @@ private sealed interface UpdateState {
     data object Checking : UpdateState
     data object Latest : UpdateState
     data class Available(val release: RemoteRelease) : UpdateState
+    data class Downloading(val release: RemoteRelease, val progress: Float) : UpdateState
+    data class DownloadFailed(val release: RemoteRelease) : UpdateState
     data object Failed : UpdateState
 }
 
