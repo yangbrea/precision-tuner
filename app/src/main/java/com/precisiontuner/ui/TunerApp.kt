@@ -209,6 +209,7 @@ fun TunerApp(
                     onSmoothingWindowChange = viewModel::updateSmoothingWindow,
                     onFilterChange = viewModel::updateFilterStrength,
                     onThemeModeChange = viewModel::updateThemeMode,
+                    onThemePresetChange = viewModel::updateThemePreset,
                     onVisualModeChange = viewModel::updateVisualMode,
                     onGaugeStyleChange = viewModel::updateGaugeStyle,
                     onDetectionEngineChange = viewModel::updateDetectionEngine,

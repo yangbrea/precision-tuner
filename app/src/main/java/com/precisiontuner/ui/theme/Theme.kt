@@ -65,15 +65,11 @@ internal fun themePalette(preset: ThemePreset): ThemePalette = when (preset) {
 }
 
 /**
- * App theme. [accent] is the "in tune" color (configurable); [darkTheme] picks
- * the dark or light palette.
+ * App theme. Classic mode uses the configurable [accent] and [darkTheme]; a
+ * system [themePreset] supplies a complete, mode-locked color scheme.
  *
- * Switching [darkTheme] animates a gradual color transition (lerp between the
- * dark and light color schemes) instead of snapping, so the whole UI fades
- * smoothly between modes. Besides [accent], the surface/container slots are
- * explicitly overridden so Material 3 components (NavigationBar indicator &
- * container, Slider inactive track, ModalBottomSheet, …) follow the app's
- * neutral palette and the accent instead of the default purple-tinted baseline.
+ * Every color slot is interpolated during a switch so backgrounds, containers,
+ * controls and text transition together without exposing Material defaults.
  */
 @Composable
 fun TunerTheme(
